@@ -1,0 +1,162 @@
+import AppKit
+import NibbleBackends
+import NibbleCore
+import NibbleStore
+import NibbleSystem
+import NibbleUI
+import os
+
+/// The composition root: builds the stores, the session, the interface and the hotkey, and owns
+/// them for the life of the app. The only place that knows about every module.
+@MainActor
+final class AppController {
+    private let session: ConversationSession
+    let interface: Interface
+    private let settingsStore: SettingsStore
+    private var settings: Settings
+    private var hotKey: GlobalHotKey?
+
+    private static let log = Logger(subsystem: bundleIdentifier, category: "app")
+    private static var bundleIdentifier: String { Bundle.main.bundleIdentifier ?? "com.glimmer.Nibble" }
+
+    static func launch(atLogin: Bool) async -> AppController {
+        let paths = AppPaths.standard(bundleIdentifier: bundleIdentifier)
+        let store = SettingsStore(paths: paths)
+        let settings: Settings
+        do {
+            settings = try store.load()
+        } catch {
+            log.error("Settings unreadable, using defaults: \(error.localizedDescription, privacy: .public)")
+            settings = Settings()
+        }
+
+        let repository = FileConversationRepository(paths: paths)
+        do {
+            let removed = try await repository.prune(settings.retention, now: Date())
+            if removed > 0 { log.info("Pruned \(removed) conversations") }
+        } catch {
+            log.error("Pruning failed: \(error.localizedDescription, privacy: .public)")
+        }
+        let restored = try? await repository.latest()
+        let backends = Backends(secrets: KeychainSecretStore(service: bundleIdentifier))
+        // `-NibbleScript sample|fail|ask` answers from a script, for trying the panel without a model.
+        let script = UserDefaults.standard.string(forKey: "NibbleScript")
+        let session = ConversationSession(
+            backend: script.map(ScriptedBackend.named) ?? backends.backend(for: settings.backend),
+            repository: repository,
+            continueWindow: settings.continueWindow,
+            restoring: restored
+        )
+        let controller = AppController(
+            session: session, settings: settings, store: store, repository: repository,
+            provider: script.map { ScriptedProvider(base: backends, script: $0) } ?? backends, dataFolder: paths.dataDirectory
+        )
+        let defaults = UserDefaults.standard
+        let interface = controller.interface
+        // `-NibbleSelfTest <file>` drives the panel and the main window and writes a report
+        // (`-NibbleSelfTestParts panel,edges` for only some of it).
+        if let report = defaults.string(forKey: "NibbleSelfTest") {
+            interface.runSelfTest(writingTo: report, failing: ScriptedBackend.named("fail"), parts: defaults.string(forKey: "NibbleSelfTestParts"))
+            return controller
+        }
+        // `-NibbleDemo <folder>` plays the panel through its moments for scripts/demo.sh.
+        if let folder = defaults.string(forKey: "NibbleDemo") {
+            interface.runDemo(signals: folder, backends: [
+                "answer": ScriptedBackend.named("demo"), "tool": ScriptedBackend.named("demo-tool"),
+                "fail": ScriptedBackend.named("demo-fail"), "retry": ScriptedBackend.named("demo-retry"),
+            ])
+            return controller
+        }
+        // `-NibblePage home|history|settings|about|sheet|menu|source|strip` opens a page, the menu
+        // bar panel, the quick chat's source menu or its strip; `-NibbleShowPanelAtLaunch YES`
+        // the panel; `-NibbleAsk "…"` sends a question. Otherwise a launch by the reader opens the
+        // main window, and a launch at login stays quiet.
+        let page = defaults.string(forKey: "NibblePage")
+        let question = defaults.string(forKey: "NibbleAsk") ?? ""
+        if let page, let main = MainPage(rawValue: page) {
+            interface.openMain(main)
+        } else if page == "sheet" {
+            interface.panel.openSheet()
+        } else if page == "menu" {
+            interface.toggleMenu()
+        } else if defaults.bool(forKey: "NibbleShowPanelAtLaunch") || !question.isEmpty {
+            interface.panel.summon()
+        } else if !atLogin {
+            interface.openMain(.home)
+        }
+        if !question.isEmpty { interface.panel.ask(question) }
+        if page == "source" { interface.panel.openSourceMenu() }
+        if page == "strip" { interface.panel.collapseWhenOpen() }
+        // `-NibbleWindowFile <file>` reports the window in front for scripts/shot.sh.
+        if let file = defaults.string(forKey: "NibbleWindowFile") { interface.reportFrontWindow(to: file) }
+        return controller
+    }
+
+    private init(
+        session: ConversationSession,
+        settings: Settings,
+        store: SettingsStore,
+        repository: FileConversationRepository,
+        provider: any BackendProvider,
+        dataFolder: URL
+    ) {
+        self.session = session
+        self.settings = settings
+        self.settingsStore = store
+        var apply: (Settings) -> Void = { _ in }
+        interface = Interface(
+            session: session,
+            settings: settings,
+            provider: provider,
+            services: SystemServicesProvider(),
+            repository: repository,
+            dataFolder: dataFolder,
+            onSettingsChange: { apply($0) }
+        )
+        registerHotKey(settings.hotKey)
+        apply = { [weak self] in self?.settingsChanged($0) }
+    }
+
+    /// Saves the settings and applies what they touch outside the panel.
+    private func settingsChanged(_ next: Settings) {
+        let previous = settings
+        settings = next
+        do {
+            try settingsStore.save(next)
+        } catch {
+            Self.log.error("Settings not saved: \(error.localizedDescription, privacy: .public)")
+        }
+        session.continueWindow = next.continueWindow
+        if next.hotKey != previous.hotKey { registerHotKey(next.hotKey) }
+    }
+
+    private func registerHotKey(_ combo: KeyCombo) {
+        hotKey?.unregister()
+        hotKey = nil
+        do {
+            hotKey = try GlobalHotKey(combo) { [weak self] in self?.interface.hotKeyPressed() }
+        } catch {
+            Self.log.error("Hotkey unavailable: \(String(describing: error), privacy: .public)")
+        }
+    }
+}
+
+/// Keeps the scripted backend in place whatever the settings say (`-NibbleScript`).
+@MainActor
+private final class ScriptedProvider: BackendProvider {
+    let base: Backends
+    let script: String
+
+    init(base: Backends, script: String) {
+        self.base = base
+        self.script = script
+    }
+
+    func backend(for settings: BackendSettings) -> any ChatBackend { ScriptedBackend.named(script) }
+    func profiles(for settings: BackendSettings) async -> [String] { await base.profiles(for: settings) }
+    func check(_ settings: BackendSettings) async -> ConnectionStatus { .connected }
+    func keyState(for settings: BackendSettings) -> KeyState { base.keyState(for: settings) }
+    func saveKey(_ key: String?, for settings: BackendSettings) throws { try base.saveKey(key, for: settings) }
+    /// Scripted replies keep nothing anywhere else.
+    func forget(remoteSession handle: String, settings: BackendSettings) async throws {}
+}

@@ -1,0 +1,75 @@
+# XcodeGen spec for the Nibble app target. The code lives in the NibbleKit package (Package.swift);
+# this target only wires the modules together. scripts/build.sh generates Nibble.xcodeproj,
+# which is not committed.
+name: Nibble
+options:
+  bundleIdPrefix: com.glimmer
+  deploymentTarget:
+    macOS: "26.0"
+  developmentLanguage: en
+  createIntermediateGroups: true
+
+packages:
+  NibbleKit:
+    path: .
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    # The signing team comes from local.env (NIBBLE_TEAM), which scripts/build.sh passes in;
+    # without one the app is signed ad hoc.
+    CODE_SIGN_STYLE: Automatic
+    ENABLE_HARDENED_RUNTIME: YES
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    LOCALIZATION_PREFERS_STRING_CATALOGS: YES
+    SWIFT_EMIT_LOC_STRINGS: YES
+    GENERATE_INFOPLIST_FILE: NO
+
+targets:
+  Nibble:
+    type: application
+    platform: macOS
+    sources:
+      - path: App
+    dependencies:
+      - package: NibbleKit
+        product: NibbleCore
+      - package: NibbleKit
+        product: NibbleBackends
+      - package: NibbleKit
+        product: NibbleStore
+      - package: NibbleKit
+        product: NibbleSystem
+      - package: NibbleKit
+        product: NibbleUI
+    settings:
+      base:
+        INFOPLIST_FILE: App/Info.plist
+        # App/AppIcon.icon: an Icon Composer document with one flat layer.
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        PRODUCT_NAME: Nibble
+        PRODUCT_BUNDLE_IDENTIFIER: com.glimmer.Nibble
+      configs:
+        # Debug builds are a separate app with their own data folder and permissions,
+        # so development never touches an installed release.
+        Debug:
+          PRODUCT_NAME: Nibble Dev
+          PRODUCT_BUNDLE_IDENTIFIER: com.glimmer.Nibble.dev
+        # The app's symbols name the folders it was built in: Release strips them (they stay in
+        # the dSYM). Only this target, since the package's object files cannot be stripped.
+        Release:
+          DEPLOYMENT_POSTPROCESSING: YES
+          STRIP_INSTALLED_PRODUCT: YES
+          STRIP_STYLE: all
+
+schemes:
+  Nibble:
+    build:
+      targets:
+        Nibble: all
+    run:
+      config: Debug
+    archive:
+      config: Release
