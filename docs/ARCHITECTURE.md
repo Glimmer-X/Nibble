@@ -21,7 +21,8 @@ Sources/
   NibbleBackends/    ChatBackend implementations (Hermes, OpenAI-compatible, Gemini, Claude,
                      scripted) and Backends
   NibbleStore/       everything written to disk, and the Keychain
-  NibbleSystem/      macOS services without UI (hotkey, screen capture, image preparation)
+  NibbleSystem/      macOS services without UI (hotkey, screen capture, image preparation, the
+                     latest release on GitHub)
   NibbleUI/          the interface: panel, main window, light board, menus, status item, strings, fonts
 Tests/               one test target per module that has logic worth testing
 scripts/             build, run, test, clean, screenshots, the demo recording and the README media
@@ -58,6 +59,7 @@ NibbleCore defines the seams as protocols:
   the remote session handle. Failures are `BackendError`s.
 - `ConversationRepository` saves conversations and attachment bytes and applies retention.
 - `SecretStore` keeps API keys (the Keychain in the app).
+- `ReleaseSource` looks up the latest release (`GitHubReleases` in NibbleSystem).
 - `BackendProvider` builds the backend in use and tells the settings page about it (Hermes
   profiles, connection, where the key comes from); `SystemServices` captures the screen, prepares
   images and adds Nibble to the login items.
@@ -338,6 +340,29 @@ keys with dot icons, each on a plate of 14 × 4 whole cells: new chat, show quic
 middle, plays the idle light, brightens the key under the pointer, and closes on a click
 elsewhere, Esc or a second click on the item.
 
+## Updates
+
+`Updates` (NibbleCore/Updates) looks for a newer Nibble: by itself once a day while
+`Settings.checkForUpdates` is on (the default), and whenever the reader presses Check for updates
+in settings. `GitHubReleases` (NibbleSystem) asks for `github.com/Glimmer-X/Nibble/releases/latest`
+without following where it leads: the redirect names the newest release's tag page (drafts and
+pre-releases skipped), and the tag is the version. Not GitHub's API, whose 60 requests an hour
+without a token are counted per address, shared by everyone behind one (an office, a campus, a
+VPN) and often used up there. The request carries no identifier and no cookies. An automatic check that fails stays quiet and is tried again an hour
+later; one the reader asked for says it failed. What was found (`UpdateRecord`: when, which
+release, which one the reader dismissed) is kept in `updates.json`, so a notice found earlier shows
+from launch without asking again.
+
+While a release newer than the version running has not been dismissed, its notice
+(`Kit/UpdateNotice.swift`) sits under the header of the panel's conversation page, the menu bar
+panel (which grows by its height, downward from the menu bar) and the top of settings: the
+version on a plate of rose cells that a band of light crosses every few seconds (`Plate.glint`;
+held still with reduced motion), with Download (the release's page) and Ignore. The keys that lead
+to it carry one rose cell (`UpdateLamp`): the panel's menu key and the sidebar's Settings.
+Ignore takes it out of every window at once until a newer release, or until the reader checks by
+hand, which brings it back. Settings' App section shows the version, the check key, what the last
+check found and the daily check's switch.
+
 ## Shortcut conflicts
 
 `SystemServices.hotKeyConflicts` (NibbleSystem/HotKeyConflicts.swift) finds what else answers the
@@ -368,6 +393,7 @@ All user data lives in one folder, outside the app bundle and outside this repos
 | What | Where | Bounded by |
 |---|---|---|
 | Settings (personas included) | `~/Library/Application Support/<bundle id>/settings.json` | a single small file |
+| What the update checks found | `…/<bundle id>/updates.json` | a single small file |
 | Conversations | `…/<bundle id>/conversations/<id>/conversation.json` | retention policy |
 | Attachments | `…/<bundle id>/conversations/<id>/attachments/` | deleted with their conversation |
 | API keys | Keychain, service `<bundle id>` | one item per backend kind and address (and Hermes profile) |
@@ -404,7 +430,7 @@ existing file.
 | `scripts/run.sh [app arguments]` | builds Debug and relaunches it |
 | `scripts/link.sh [--remove]` | builds Release and links it as `/Applications/Nibble.app`, so Nibble opens from Applications and runs the latest build (a symbolic link into `build/`, which Spotlight does not index, so no copies show up) |
 | `scripts/release.sh` | the release for GitHub: built with its own DerivedData, signed with the Developer ID of `NIBBLE_TEAM`, checked for paths of the Mac that built it, notarized with the notarytool profile `NIBBLE_NOTARY_PROFILE` (both in `local.env`), stapled and zipped with its SHA-256 in `build/release/` |
-| `scripts/test.sh [swift test arguments]` | runs the package tests, without any window: the everyday check after a change |
+| `scripts/test.sh [swift test arguments]` | runs the package tests, without any window: the everyday check after a change. They never touch the network; `NIBBLE_NETWORK_TESTS=1` adds a check of Nibble's latest release on GitHub |
 | `scripts/check.sh [panel] [edges] [main] [menu]` | builds Debug and runs the on-screen self-test (scripted backend, throwaway data), only what code alone cannot see: window heights and places, what a press lands on, the light through a reply; prints the JSON report. Its windows take the keyboard, so it runs only for changes to window behaviour, and only the part concerned |
 | `scripts/shot.sh PAGE NAME [app arguments]` | screenshots a page of the Debug app (home, history, settings, about, sheet, menu, source) with made-up conversations from `scripts/demo-data.py` (`en` for English ones) and the scripted backend; data in `build/shots/data`, pictures in `build/shots/` |
 | `scripts/demo.sh [THEME]` | records the panel for marketing in one colour theme (violet if left out; `marketing/nibble-demo-en-THEME.mp4` and `.marks`, the moments' times; about a minute, on a backdrop in the theme's hue): the Debug app plays English questions through every light (thinking straight into the tunnel, played faster than usual so it reads in a few seconds) (`PanelDemo`, scripted backends) while `scripts/record.swift` films only Nibble's windows with ScreenCaptureKit on a plain background; the panel takes the keyboard while it runs |
@@ -429,7 +455,9 @@ Useful launch arguments: `-NibbleShowPanelAtLaunch YES` shows the panel right af
 window on a page (also `about`), `-NibblePage sheet` the panel's conversation page,
 `-NibblePage menu` the menu bar panel and `-NibblePage source` the panel's source menu (with
 `-NibbleAsk`, so the chat's header shows); `-NibbleWindowFile <file>` writes where the window in
-front is once it has settled (scripts/shot.sh); `-NibbleSelfTest <file>` runs the self-test of the
+front is once it has settled (scripts/shot.sh); `-NibbleSection app` scrolls settings to a
+section; `-NibbleRelease 0.2.0` pretends that version is out, to see its notice (runs answered from
+a script look for no release otherwise); `-NibbleSelfTest <file>` runs the self-test of the
 panel and the main window (see `scripts/check.sh`). For screenshots outside scripts/shot.sh, point
 `NIBBLE_DATA_DIR` at a folder outside ~/Documents, ~/Desktop and ~/Downloads, which macOS guards
 with a permission prompt.

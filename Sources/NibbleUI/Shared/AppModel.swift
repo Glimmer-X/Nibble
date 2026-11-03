@@ -21,6 +21,9 @@ final class AppModel {
     private static let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Nibble", category: "history")
 
     let session: ConversationSession
+    /// Looks for a newer Nibble; its notice shows in the panel's conversation page, the menu bar
+    /// panel and settings.
+    let updates: Updates
     @ObservationIgnored let provider: any BackendProvider
     @ObservationIgnored let services: any SystemServices
     @ObservationIgnored let repository: any ConversationRepository
@@ -78,6 +81,7 @@ final class AppModel {
 
     init(
         session: ConversationSession,
+        updates: Updates,
         settings: NibbleCore.Settings,
         provider: any BackendProvider,
         services: any SystemServices,
@@ -85,6 +89,7 @@ final class AppModel {
         dataFolder: URL
     ) {
         self.session = session
+        self.updates = updates
         self.settings = settings
         self.provider = provider
         self.services = services
@@ -185,6 +190,10 @@ final class AppModel {
         language = Language(settings.language)
         TextScale.shared.size = settings.textSize
         if settings.hotKey != old.hotKey { refreshConflicts() }
+        if settings.checkForUpdates != old.checkForUpdates {
+            updates.automatic = settings.checkForUpdates
+            updates.checkIfDue()
+        }
         if settings.backend != old.backend {
             session.backend = provider.backend(for: settings.backend)
             if settings.backend.hermes.address != old.backend.hermes.address { profiles = [] }
@@ -294,6 +303,12 @@ final class AppModel {
 
     func openCaptureSettings() {
         services.openScreenCaptureSettings()
+    }
+
+    /// Opens the download page of the newer release.
+    func openRelease() {
+        guard let page = updates.newer?.page else { return }
+        NSWorkspace.shared.open(page)
     }
 
     /// "0.1.0" and "1", from the app's Info.plist.

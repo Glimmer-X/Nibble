@@ -2,7 +2,8 @@ import Carbon.HIToolbox
 import NibbleCore
 import SwiftUI
 
-/// Every setting on one page in the main window: connection, appearance, quick chat, app and data.
+/// Every setting on one page in the main window: connection, appearance, quick chat, app and data,
+/// under the notice of a newer version when there is one.
 /// Rows of 40 pt with labels in a 120 pt column; a group's chosen option is a lit chip, an
 /// on/off setting a dot switch. On the right a ruler of short bars of lit board cells, one per
 /// section: the section in view is the brightest, the pointer lights a bar and names it, a click
@@ -25,6 +26,10 @@ struct SettingsPage: View {
             HStack(alignment: .top, spacing: 24) {
                 ScrollView(.vertical) {
                     VStack(alignment: .leading, spacing: 0) {
+                        if let release = model.updates.notice {
+                            UpdateNotice(release: release, id: "settings-update", place: .main("body"))
+                                .padding(.bottom, 8)
+                        }
                         BackendSection()
                             .modifier(SectionTop(section: .connection, tops: $tops))
                         SettingsSection(title: s.lookSection, section: .look) {
@@ -98,6 +103,12 @@ struct SettingsPage: View {
                             Row(s.openAtLogin) {
                                 DotSwitch(id: "login", isOn: model.opensAtLogin, label: s.openAtLogin) { model.setOpensAtLogin(!model.opensAtLogin) }
                             }
+                            Row(s.versionLabel) { VersionStatus() }
+                            Row(s.updateCheck) {
+                                DotSwitch(id: "update-check", isOn: model.settings.checkForUpdates, label: s.updateCheck) {
+                                    model.settings.checkForUpdates.toggle()
+                                }
+                            }
                         }
                         .modifier(SectionTop(section: .app, tops: $tops))
                         SettingsSection(title: s.dataSection, section: .data) {
@@ -150,6 +161,11 @@ struct SettingsPage: View {
             }
             .onChange(of: tops) { updateCurrent() }
             .onChange(of: atBottom) { updateCurrent() }
+            .onAppear {
+                // `-NibbleSection app` opens on a section, for screenshots.
+                guard let name = UserDefaults.standard.string(forKey: "NibbleSection"), let section = Section(rawValue: name) else { return }
+                DispatchQueue.main.async { proxy.scrollTo(section, anchor: .top) }
+            }
         }
         .onAppear {
             model.refreshBackendState()
@@ -258,6 +274,33 @@ private struct ConflictNote: View {
             }
             .padding(.leading, 8)
         }
+    }
+}
+
+/// The version running, a key to check for a newer one now, and what the last check found.
+private struct VersionStatus: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        let s = model.strings
+        let colors = model.colors
+        let updates = model.updates
+        Text(model.version.version).pixelText().foregroundStyle(colors.ink).padding(.horizontal, 8)
+        TextKey(id: "check-updates", title: s.checkForUpdates, place: .main("body")) { updates.check() }
+        Group {
+            if updates.status == .checking {
+                Text(s.checking).foregroundStyle(colors.ink2)
+            } else if case .failed = updates.status {
+                Text(s.checkFailed).foregroundStyle(colors.rose)
+            } else if let newer = updates.newer {
+                Text(s.newVersion(newer.version.description)).foregroundStyle(colors.rose)
+            } else if updates.record.checked != nil {
+                Text(s.upToDate).foregroundStyle(colors.ink2)
+            }
+        }
+        .pixelText()
+        .lineLimit(1)
+        .padding(.leading, 8)
     }
 }
 

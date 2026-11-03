@@ -3,9 +3,11 @@ import SwiftUI
 
 /// The conversation's own page, behind the menu key: this conversation in numbers (questions,
 /// tokens, speed, wait, context, failures, and each answer's speed as a dot chart) above the
-/// most recent other conversations, which it can switch to. Its foot opens the main window.
+/// most recent other conversations, which it can switch to. Its foot opens the main window. A
+/// newer version's notice sits under its header.
 struct ConversationSheet: View {
     @Environment(PanelModel.self) private var model
+    @Environment(AppModel.self) private var app
 
     var body: some View {
         let s = model.strings
@@ -18,6 +20,12 @@ struct ConversationSheet: View {
             }
             .padding(.horizontal, 16)
             .frame(height: 48)
+
+            if let release = app.updates.notice {
+                UpdateNotice(release: release, id: "sheet-update", place: .sheet)
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 8)
+            }
 
             ScrollView(.vertical) {
                 VStack(alignment: .leading, spacing: 32) {

@@ -11,6 +11,7 @@ import os
 @MainActor
 final class AppController {
     private let session: ConversationSession
+    private let updates: Updates
     let interface: Interface
     private let settingsStore: SettingsStore
     private var settings: Settings
@@ -47,11 +48,30 @@ final class AppController {
             continueWindow: settings.continueWindow,
             restoring: restored
         )
+        let defaults = UserDefaults.standard
+        // `-NibbleRelease 0.2.0` pretends that version is out, to see its notice. Runs answered
+        // from a script otherwise neither look nor show what was found before (screenshots stay
+        // as they are).
+        let pretend = defaults.string(forKey: "NibbleRelease").flatMap(AppVersion.init)
+        let quiet = script != nil && pretend == nil
+        let updateStore = UpdateStore(paths: paths)
+        let updates = Updates(
+            current: AppVersion(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "") ?? AppVersion("0")!,
+            record: quiet ? UpdateRecord() : updateStore.load(),
+            automatic: settings.checkForUpdates,
+            source: pretend.map { PretendRelease(version: $0) as any ReleaseSource } ?? GitHubReleases(repository: "Glimmer-X/Nibble")
+        )
+        updates.onRecordChange = { record in
+            do {
+                try updateStore.save(record)
+            } catch {
+                log.error("Update record not saved: \(error.localizedDescription, privacy: .public)")
+            }
+        }
         let controller = AppController(
-            session: session, settings: settings, store: store, repository: repository,
+            session: session, updates: updates, settings: settings, store: store, repository: repository,
             provider: script.map { ScriptedProvider(base: backends, script: $0) } ?? backends, dataFolder: paths.dataDirectory
         )
-        let defaults = UserDefaults.standard
         let interface = controller.interface
         // `-NibbleSelfTest <file>` drives the panel and the main window and writes a report
         // (`-NibbleSelfTestParts panel,edges` for only some of it).
@@ -69,8 +89,9 @@ final class AppController {
         }
         // `-NibblePage home|history|settings|about|sheet|menu|source|strip` opens a page, the menu
         // bar panel, the quick chat's source menu or its strip; `-NibbleShowPanelAtLaunch YES`
-        // the panel; `-NibbleAsk "…"` sends a question. Otherwise a launch by the reader opens the
-        // main window, and a launch at login stays quiet.
+        // the panel; `-NibbleAsk "…"` sends a question; `-NibbleSection app` scrolls settings to a
+        // section. Otherwise a launch by the reader opens the main window, and a launch at login
+        // stays quiet.
         let page = defaults.string(forKey: "NibblePage")
         let question = defaults.string(forKey: "NibbleAsk") ?? ""
         if let page, let main = MainPage(rawValue: page) {
@@ -89,11 +110,13 @@ final class AppController {
         if page == "strip" { interface.panel.collapseWhenOpen() }
         // `-NibbleWindowFile <file>` reports the window in front for scripts/shot.sh.
         if let file = defaults.string(forKey: "NibbleWindowFile") { interface.reportFrontWindow(to: file) }
+        if !quiet { updates.start() }
         return controller
     }
 
     private init(
         session: ConversationSession,
+        updates: Updates,
         settings: Settings,
         store: SettingsStore,
         repository: FileConversationRepository,
@@ -101,11 +124,13 @@ final class AppController {
         dataFolder: URL
     ) {
         self.session = session
+        self.updates = updates
         self.settings = settings
         self.settingsStore = store
         var apply: (Settings) -> Void = { _ in }
         interface = Interface(
             session: session,
+            updates: updates,
             settings: settings,
             provider: provider,
             services: SystemServicesProvider(),
@@ -138,6 +163,15 @@ final class AppController {
         } catch {
             Self.log.error("Hotkey unavailable: \(String(describing: error), privacy: .public)")
         }
+    }
+}
+
+/// A release that is always out (`-NibbleRelease`), for seeing the notice of a newer version.
+private struct PretendRelease: ReleaseSource {
+    let version: AppVersion
+
+    func latest() async throws -> Release {
+        Release(version: version, page: URL(string: "https://github.com/Glimmer-X/Nibble/releases")!)
     }
 }
 

@@ -5,6 +5,7 @@ import Foundation
 /// Layout under `dataDirectory`:
 ///
 ///     settings.json
+///     updates.json        what the update checks found
 ///     conversations/<conversation-id>/conversation.json
 ///     conversations/<conversation-id>/attachments/<attachment-id>
 ///
@@ -33,6 +34,10 @@ public struct AppPaths: Sendable, Equatable {
 
     public var settingsFile: URL {
         dataDirectory.appending(path: "settings.json", directoryHint: .notDirectory)
+    }
+
+    public var updatesFile: URL {
+        dataDirectory.appending(path: "updates.json", directoryHint: .notDirectory)
     }
 
     public var conversationsDirectory: URL {

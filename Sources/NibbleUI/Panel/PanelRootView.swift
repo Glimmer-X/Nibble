@@ -105,7 +105,8 @@ private struct ChatPage: View {
 }
 
 /// The header: the service over the persona in smaller type on the left (a menu to change them),
-/// then new chat, menu, collapse and close.
+/// then new chat, menu (with a rose cell while a newer version waits behind it), collapse and
+/// close.
 private struct Header: View {
     @Environment(PanelModel.self) private var model
 
@@ -134,6 +135,7 @@ private struct Header: View {
             Spacer(minLength: 8)
             IconKey(id: "new", icon: .add, label: s.newChat) { model.newChat() }
             IconKey(id: "sheet", icon: .menu, label: s.thisChat) { model.toggleSheet() }
+                .overlay(alignment: .topTrailing) { UpdateLamp(id: "sheet-update-lamp", page: "chat") }
             IconKey(id: "collapse", icon: .collapse, label: s.collapse) { model.collapse() }
             IconKey(id: "close", icon: .close, label: s.close) { model.controller?.dismiss() }
         }

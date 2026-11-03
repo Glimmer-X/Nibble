@@ -33,6 +33,8 @@ public struct Settings: Codable, Sendable, Equatable {
     public var personas: [Persona]
     /// The persona the model APIs answer as; nil for none (no system prompt).
     public var persona: Persona.ID?
+    /// Nibble looks for a newer version once a day.
+    public var checkForUpdates: Bool
 
     public init(
         hotKey: KeyCombo = .optionSpace,
@@ -49,7 +51,8 @@ public struct Settings: Codable, Sendable, Equatable {
         background: BackgroundMotion = .lava,
         textSize: TextSize = .small,
         personas: [Persona] = [],
-        persona: Persona.ID? = nil
+        persona: Persona.ID? = nil,
+        checkForUpdates: Bool = true
     ) {
         self.hotKey = hotKey
         self.continueWindowMinutes = continueWindowMinutes
@@ -66,6 +69,7 @@ public struct Settings: Codable, Sendable, Equatable {
         self.textSize = textSize
         self.personas = personas
         self.persona = persona
+        self.checkForUpdates = checkForUpdates
     }
 
     public var continueWindow: Duration { .seconds(continueWindowMinutes * 60) }
@@ -93,6 +97,7 @@ public struct Settings: Codable, Sendable, Equatable {
         textSize = (try? c.decodeIfPresent(TextSize.self, forKey: .textSize)) ?? defaults.textSize
         personas = (try? c.decodeIfPresent([Persona].self, forKey: .personas)) ?? defaults.personas
         persona = try? c.decodeIfPresent(Persona.ID.self, forKey: .persona)
+        checkForUpdates = (try? c.decodeIfPresent(Bool.self, forKey: .checkForUpdates)) ?? defaults.checkForUpdates
     }
 }
 

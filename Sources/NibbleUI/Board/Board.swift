@@ -52,6 +52,9 @@ struct BoardScene {
         /// Light the whole cells nearest the rectangle (as many as it is wide and tall, at least
         /// one), wherever it falls between cell middles: lamps and the ruler's bars.
         var snap = false
+        /// A band of brighter cells runs across the plate every few seconds (the notice of a new
+        /// version).
+        var glint = false
     }
 
     /// The band of light that leads a new page in.
@@ -633,17 +636,41 @@ final class Board {
         let g = cells(R.x0, R.x1, R.y0, R.y1, clip: q.clip)
         guard g.r0 < g.r1, g.c0 < g.c1 else { return }
         let P = look.pitch
+        let band = q.glint ? glint(across: R) : nil
         for r in g.r0..<g.r1 {
             let y = (Double(r) + 0.5) * P
             if y < R.y0 || y > R.y1 { continue }
             for c in g.c0..<g.c1 {
                 let x = (Double(c) + 0.5) * P
                 if x < R.x0 || x > R.x1 || !inside(q.clip, x, y) { continue }
-                v[r * cols + c] = q.value
+                var value = q.value
+                if let band {
+                    let d = (x - band) / Self.glintWidth
+                    value += Self.glintLight * exp(-d * d)
+                }
+                v[r * cols + c] = value
                 self.tone[r * cols + c] = tone
             }
         }
     }
+
+    /// Where a glinting plate's band is now: it crosses the plate, left to right, in the first
+    /// `glintRun` of every `glintPeriod` (milliseconds), and rests the rest of the time; nil while
+    /// it rests or motion is reduced.
+    func glint(across R: BoardScene.Rect) -> Double? {
+        guard !still else { return nil }
+        let p = now().truncatingRemainder(dividingBy: Self.glintPeriod) / Self.glintRun
+        guard p >= 0, p < 1 else { return nil }
+        let e = p * p * (3 - 2 * p)
+        let reach = 3 * Self.glintWidth
+        return R.x0 - reach + (R.x1 - R.x0 + 2 * reach) * e
+    }
+
+    static let glintPeriod = 4000.0
+    static let glintRun = 1500.0
+    /// The band's half width (points) and how much brighter its middle is than the plate.
+    static let glintWidth = 18.0
+    static let glintLight = 0.22
 
     private func typingLight(_ now: Double) {
         func life(_ kind: TypingLight) -> Double {

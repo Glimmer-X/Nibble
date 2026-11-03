@@ -303,6 +303,18 @@ struct Strings {
     }
     var quickChatSection: String { t("浮窗", "Quick chat") }
 
+    // MARK: Updates
+
+    func newVersion(_ version: String) -> String { t("有新版本 \(version)", "Version \(version) is available") }
+    var download: String { t("下载", "Download") }
+    var ignore: String { t("忽略", "Ignore") }
+    var versionLabel: String { t("版本", "Version") }
+    var checkForUpdates: String { t("检查更新", "Check for updates") }
+    /// The switch for the daily check.
+    var updateCheck: String { t("自动检查更新", "Check daily") }
+    var upToDate: String { t("已是最新版本", "Up to date") }
+    var checkFailed: String { t("没能检查，稍后再试", "Couldn't check. Try later.") }
+
     // MARK: Main window
 
     func page(_ page: MainPage) -> String {

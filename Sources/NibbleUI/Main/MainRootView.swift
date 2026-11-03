@@ -57,8 +57,9 @@ struct MainRootView: View {
     }
 }
 
-/// The sidebar: Nibble's mark, the pages (the open one on a plate of lit cells), and at the foot
-/// who answers (a key to change the service and persona) and About.
+/// The sidebar: Nibble's mark, the pages (the open one on a plate of lit cells; settings with a
+/// rose cell while a newer version waits), and at the foot who answers (a key to change the
+/// service and persona) and About.
 private struct Sidebar: View {
     @Environment(MainModel.self) private var model
     @Environment(AppModel.self) private var app
@@ -137,8 +138,10 @@ private struct PageItem: View {
         Button {
             withAnimation(.easeOut(duration: 0.28)) { model.go(to: page) }
         } label: {
-            Text(app.strings.page(page))
-                .pixelText()
+            HStack(spacing: 10) {
+                Text(app.strings.page(page)).pixelText()
+                if page == .settings { UpdateLamp(id: "page-settings-update") }
+            }
                 .padding(.horizontal, 16)
                 .frame(maxWidth: .infinity, minHeight: 36, alignment: .leading)
                 .contentShape(Rectangle())

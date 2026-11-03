@@ -71,7 +71,7 @@ Nibble 通过 Hermes gateway 内置的 API 服务器和它通信。
 
 ## 隐私
 
-Nibble 只把消息发给你设置的服务，不收集其他任何信息。对话和设置以文件形式保存在 `~/Library/Application Support/com.glimmer.Nibble`，历史可以选择保留 7、30 或 90 天。API 密钥存放在钥匙串里。Hermes 在同一台 Mac 上时，Nibble 只读取人格 `.env` 里的密钥，从不写入。只有按下截屏键时才会截取屏幕，第一次会请求屏幕录制权限。
+Nibble 只把消息发给你设置的服务，不收集其他任何信息。它每天向 GitHub 查询一次最新的版本号，请求里不带任何关于你的信息，可以在设置里关掉。对话和设置以文件形式保存在 `~/Library/Application Support/com.glimmer.Nibble`，历史可以选择保留 7、30 或 90 天。API 密钥存放在钥匙串里。Hermes 在同一台 Mac 上时，Nibble 只读取人格 `.env` 里的密钥，从不写入。只有按下截屏键时才会截取屏幕，第一次会请求屏幕录制权限。
 
 ## 卸载
 

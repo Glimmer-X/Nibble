@@ -13,6 +13,7 @@ public final class Interface: NSObject {
 
     public init(
         session: ConversationSession,
+        updates: Updates,
         settings: NibbleCore.Settings,
         provider: any BackendProvider,
         services: any SystemServices,
@@ -21,7 +22,7 @@ public final class Interface: NSObject {
         onSettingsChange: @escaping (NibbleCore.Settings) -> Void
     ) {
         Typeface.register()
-        app = AppModel(session: session, settings: settings, provider: provider, services: services, repository: repository, dataFolder: dataFolder)
+        app = AppModel(session: session, updates: updates, settings: settings, provider: provider, services: services, repository: repository, dataFolder: dataFolder)
         panel = PanelController(app: app)
         main = MainWindowController(app: app)
         super.init()

@@ -7,10 +7,14 @@ import SwiftUI
 /// a dot chart, the latest three conversations, and four keys on plates of lit cells: new chat,
 /// the quick chat, the main window, and quitting on warning cells. It blooms open from the middle
 /// like the panel and closes when the reader clicks elsewhere, presses Esc, or clicks the item
-/// again.
+/// again. While a newer version waits, its notice sits under the header and the panel is that
+/// much taller, growing and shrinking downward from the menu bar.
 @MainActor
 final class MenuPanelController {
-    static let size = CGSize(width: 340, height: 460)
+    static let width = 340.0
+    static let height = 460.0
+    /// What the notice of a newer version adds to the height.
+    static var noticeRoom: Double { Double(UpdateNotice.height) + 10 }
     private static let openSeconds = 0.32
     private static let closeSeconds = 0.16
 
@@ -19,6 +23,8 @@ final class MenuPanelController {
     private let app: AppModel
     private let panel: FloatingPanel
     private var boardView: BoardView?
+    /// The panel's height now.
+    private var height = MenuPanelController.height
     private var openness = 0.0
     /// +1 while opening, −1 while closing.
     private var opening = 0
@@ -26,17 +32,20 @@ final class MenuPanelController {
 
     init(app: AppModel, actions: MenuActions) {
         self.app = app
-        board = Board(width: Self.size.width, maxHeight: Self.size.height)
+        let size = CGSize(width: Self.width, height: Self.height)
+        // Rows for the notice too, so the board never reallocates.
+        board = Board(width: Self.width, maxHeight: Self.height + 64)
         board.still = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-        panel = FloatingPanel(contentRect: NSRect(origin: .zero, size: Self.size))
+        panel = FloatingPanel(contentRect: NSRect(origin: .zero, size: size))
         panel.level = .popUpMenu
         panel.isMovableByWindowBackground = false
         panel.isOpaque = true
 
-        let container = NSView(frame: NSRect(origin: .zero, size: Self.size))
+        let container = NSView(frame: NSRect(origin: .zero, size: size))
         container.wantsLayer = true
         if let boardView = BoardView(board: board) {
             boardView.frame = container.bounds
+            boardView.autoresizingMask = [.width, .height]
             boardView.onFrame = { [weak self] in self?.frame() }
             container.addSubview(boardView)
             self.boardView = boardView
@@ -50,6 +59,7 @@ final class MenuPanelController {
         let hosting = NSHostingView(rootView: root)
         hosting.sizingOptions = []
         hosting.frame = container.bounds
+        hosting.autoresizingMask = [.width, .height]
         container.addSubview(hosting)
         panel.contentView = container
         panel.onResignKey = { [weak self] in self?.close() }
@@ -78,8 +88,9 @@ final class MenuPanelController {
             item = NSRect(x: top.maxX - 160, y: top.maxY, width: 24, height: 0)
         }
         let area = screen?.visibleFrame ?? .zero
-        let x = min(max(item.midX - Self.size.width / 2, area.minX + 8), area.maxX - Self.size.width - 8)
-        panel.setFrameOrigin(NSPoint(x: x.rounded(), y: (item.minY - 6 - Self.size.height).rounded()))
+        let x = min(max(item.midX - Self.width / 2, area.minX + 8), area.maxX - Self.width - 8)
+        height = wantedHeight
+        panel.setFrame(NSRect(x: x.rounded(), y: (item.minY - 6 - height).rounded(), width: Self.width, height: height), display: false)
         applyColours()
         openness = board.still ? 1 : 0
         opening = 1
@@ -115,9 +126,10 @@ final class MenuPanelController {
             panel.alphaValue = CGFloat(min(1, openness * 1.6))
         }
         if board.palette != app.palette { applyColours() }
+        if wantedHeight != height { resize() }
         let rest = app.settings.background
         board.setMotion(rest.motion, gain: rest.windowGain)
-        var scene = BoardScene(width: Self.size.width, height: Self.size.height)
+        var scene = BoardScene(width: Self.width, height: height)
         scene.open = openness
         registry.light(&scene, dt: dt, alpha: { _ in 1 }, target: { control in
             switch control.kind {
@@ -129,6 +141,19 @@ final class MenuPanelController {
         })
         boardView?.framesPerSecond = board.wantsFullRate || opening != 0 ? 60 : 30
         return scene
+    }
+
+    /// Taller by the notice's room while a newer version waits.
+    private var wantedHeight: Double {
+        Self.height + (app.updates.notice != nil ? Self.noticeRoom : 0)
+    }
+
+    /// Takes the wanted height, keeping the top under the menu bar.
+    private func resize() {
+        height = wantedHeight
+        let top = panel.frame.maxY
+        panel.setFrame(NSRect(x: panel.frame.minX, y: top - height, width: Self.width, height: height), display: true)
+        boardView?.needsRedraw = true
     }
 
     private func applyColours() {
@@ -171,6 +196,12 @@ private struct MenuRootView: View {
                         .padding(.trailing, -8)
                 }
                 .frame(height: 36)
+
+                if let release = app.updates.notice {
+                    UpdateNotice(release: release, id: "menu-update", place: .main)
+                        .padding(.top, 10)
+                        .padding(.horizontal, -8)
+                }
 
                 HStack(alignment: .bottom, spacing: 16) {
                     VStack(alignment: .leading, spacing: 12) {
@@ -231,7 +262,8 @@ private struct MenuRootView: View {
             .padding(.horizontal, 20)
             .padding(.top, 12)
             .padding(.bottom, 20)
-            .frame(width: MenuPanelController.size.width, height: MenuPanelController.size.height, alignment: .topLeading)
+            .frame(width: MenuPanelController.width, alignment: .topLeading)
+            .frame(maxHeight: .infinity, alignment: .topLeading)
 
             if sourceOpen {
                 Color.clear.contentShape(Rectangle()).onTapGesture { sourceOpen = false }
@@ -243,7 +275,8 @@ private struct MenuRootView: View {
                 .padding(.trailing, 12)
             }
         }
-        .frame(width: MenuPanelController.size.width, height: MenuPanelController.size.height, alignment: .topLeading)
+        .frame(width: MenuPanelController.width, alignment: .topLeading)
+        .frame(maxHeight: .infinity, alignment: .topLeading)
         .coordinateSpace(.named(BoardSpace.name))
         .foregroundStyle(colors.ink)
         .overlay { Rectangle().strokeBorder(colors.rim, lineWidth: 1).allowsHitTesting(false) }

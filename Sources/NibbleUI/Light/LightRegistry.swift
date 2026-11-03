@@ -67,6 +67,8 @@ final class LightRegistry {
         var value = 0.27
         /// A lamp lights exactly the cells under it; a plate under text reaches a little past.
         var lamp = false
+        /// A band of light runs across it every few seconds.
+        var glint = false
         /// The view that reported it.
         var owner: UUID?
     }
@@ -171,7 +173,7 @@ final class LightRegistry {
             if plate.clip != nil, clip == nil { continue }
             let r = plate.lamp ? plate.rect : plate.rect.insetBy(dx: -2, dy: -2)
             if let clip, r.maxY < clip.y0 || r.minY > clip.y1 { continue }
-            scene.plates.append(BoardScene.Plate(rect: Self.rect(r), clip: clip, rose: plate.rose, value: plate.value, snap: plate.lamp))
+            scene.plates.append(BoardScene.Plate(rect: Self.rect(r), clip: clip, rose: plate.rose, value: plate.value, snap: plate.lamp, glint: plate.glint))
         }
     }
 
@@ -203,9 +205,10 @@ extension View {
     /// `page`, clipped to the scrolling area `clip`. A plate under a field or a key may be dimmer
     /// than one under text (`value`).
     /// While `on` is false the plate is off; switching it keeps the view the same view, so its
-    /// state (hover, a key about to confirm) carries over.
-    func boardPlate(_ id: String, rose: Bool = false, value: Double = 0.27, page: String = "chat", clip: String? = "log", on: Bool = true) -> some View {
-        modifier(BoardPlateModifier(id: id, rose: rose, page: page, clip: clip, value: value, lamp: false, on: on))
+    /// state (hover, a key about to confirm) carries over. A `glint` runs a band of light across
+    /// it every few seconds.
+    func boardPlate(_ id: String, rose: Bool = false, value: Double = 0.27, page: String = "chat", clip: String? = "log", on: Bool = true, glint: Bool = false) -> some View {
+        modifier(BoardPlateModifier(id: id, rose: rose, page: page, clip: clip, value: value, lamp: false, on: on, glint: glint))
     }
 
     /// Reports a lamp: the board cells exactly under this view lit at `value` (a 9 × 9 pt view is
@@ -258,6 +261,7 @@ private struct BoardPlateModifier: ViewModifier {
     let value: Double
     let lamp: Bool
     var on = true
+    var glint = false
     /// Where the view is, kept for turning the plate on without waiting for it to move.
     @State private var seen = Seen()
 
@@ -284,7 +288,7 @@ private struct BoardPlateModifier: ViewModifier {
     }
 
     private func report(_ rect: CGRect) {
-        registry?.setPlate(id, LightRegistry.Plate(rect: rect, rose: rose, page: page, clip: clip, value: value, lamp: lamp, owner: owner))
+        registry?.setPlate(id, LightRegistry.Plate(rect: rect, rose: rose, page: page, clip: clip, value: value, lamp: lamp, glint: glint, owner: owner))
     }
 }
 

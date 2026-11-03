@@ -71,7 +71,7 @@ Choose OpenAI-compatible, Gemini or Claude, paste an API key and pick a model. A
 
 ## Privacy
 
-Nibble sends your messages only to the service you set up, and collects nothing else. Conversations and settings are files in `~/Library/Application Support/com.glimmer.Nibble`; history is kept for 7, 30 or 90 days, as you choose. API keys are kept in the Keychain. With Hermes on the same Mac, Nibble reads the profile's key from Hermes's `.env` and never writes there. The screen is captured only when you press the capture key, which asks for Screen Recording permission the first time.
+Nibble sends your messages only to the service you set up, and collects nothing else. Once a day it asks GitHub for the latest version number; the request carries nothing about you, and Settings can turn it off. Conversations and settings are files in `~/Library/Application Support/com.glimmer.Nibble`; history is kept for 7, 30 or 90 days, as you choose. API keys are kept in the Keychain. With Hermes on the same Mac, Nibble reads the profile's key from Hermes's `.env` and never writes there. The screen is captured only when you press the capture key, which asks for Screen Recording permission the first time.
 
 ## Uninstall
 
