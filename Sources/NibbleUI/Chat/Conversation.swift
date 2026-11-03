@@ -95,18 +95,26 @@ private struct UserMessageView: View {
     @State private var hot = false
 
     var body: some View {
+        content
+            .opacity(replaced ? ConversationView.replacedOpacity : 1)
+            // The key hangs off the question's bottom left corner: it takes no room, so a long
+            // question does not wrap anew when it shows.
+            .overlay(alignment: .bottomLeading) { key.alignmentGuide(.leading) { $0[.trailing] + 8 } }
+            // About three quarters of the panel's width, so a wider panel gives the question room too.
+            .frame(maxWidth: max(240, (model.settings.panelWidth - 48) * 0.78), alignment: .trailing)
+            .frame(maxWidth: .infinity, alignment: .trailing)
+            .onHover { hot = $0 }
+    }
+
+    @ViewBuilder
+    private var key: some View {
         let s = model.strings
         let session = model.session
-        HStack(alignment: .bottom, spacing: 8) {
-            Spacer(minLength: 0)
-            if isLast, session.editing == message.id {
-                TextKey(id: "cancel-edit", title: s.cancelEditing) { model.cancelEditing() }
-            } else if isLast, hot, session.canEditLastQuestion {
-                TextKey(id: "edit-question", title: s.editQuestion) { model.editLastQuestion() }
-            }
-            content.opacity(replaced ? ConversationView.replacedOpacity : 1)
+        if isLast, session.editing == message.id {
+            TextKey(id: "cancel-edit", title: s.cancelEditing) { model.cancelEditing() }
+        } else if isLast, hot, session.canEditLastQuestion {
+            TextKey(id: "edit-question", title: s.editQuestion) { model.editLastQuestion() }
         }
-        .onHover { hot = $0 }
     }
 
     private var content: some View {
@@ -133,8 +141,6 @@ private struct UserMessageView: View {
                     .boardPlate("user-\(message.id)", value: replaced ? 0.1 : 0.27)
             }
         }
-        // About three quarters of the panel's width, so a wider panel gives the question room too.
-        .frame(maxWidth: max(240, (model.settings.panelWidth - 48) * 0.78), alignment: .trailing)
     }
 }
 
