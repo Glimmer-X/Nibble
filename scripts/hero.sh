@@ -38,6 +38,14 @@ backdrop() {
     ffmpeg -v error -ss 1 -i "marketing/nibble-demo-en-$1.mp4" -frames:v 1 \
         -vf "crop=2:2:4:4,scale=1:1" -f rawvideo -pix_fmt rgb24 - | xxd -p
 }
+# stalls THEME START: where the recording stood still for more than 50 ms within the clip. A
+# recording made while the Mac is busy (right after a build, say) can drop frames; looped every
+# seven seconds, a stall reads as a stutter and a flicker.
+stalls() {
+    ffprobe -v error -select_streams v:0 -show_entries frame=pts_time -of csv=p=0 \
+        -read_intervals "$2%+$(( LENGTH + 0.2 ))" "marketing/nibble-demo-en-$1.mp4" \
+        | awk -F, 'NR > 1 && $1 - p > 0.05 { printf " %.2f s at %.1f s", $1 - p, p } { p = $1 }'
+}
 
 typeset -A START
 START[violet]=$(( $(moment violet summon) - 0.3 ))
@@ -51,6 +59,8 @@ i=0
 for theme in violet teal rose orange; do
     file="marketing/nibble-demo-en-$theme.mp4"
     [[ -f "$file" ]] || { echo "missing $file (run scripts/demo.sh $theme)" >&2; exit 1; }
+    stood="$(stalls $theme ${START[$theme]})"
+    [[ -z "$stood" ]] || { echo "the $theme recording stalls in its clip:$stood (run scripts/demo.sh $theme again)" >&2; exit 1; }
     colour="0x$(backdrop $theme)"
     INPUTS+=(-ss "${START[$theme]}" -t "$LENGTH" -i "$file")
     FILTERS+="[${i}:v]fps=${FPS},setpts=PTS-STARTPTS,${CLIP},"
