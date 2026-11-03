@@ -21,6 +21,10 @@ public struct HermesBackend: ChatBackend {
         self.apiKey = apiKey
     }
 
+    /// Hermes keeps each conversation in its own session; its API server has no way to take a
+    /// turn back.
+    public var keepsConversation: Bool { true }
+
     public func respond(to request: ChatRequest) -> AsyncThrowingStream<ChatEvent, any Error> {
         AsyncThrowingStream { continuation in
             let task = Task {

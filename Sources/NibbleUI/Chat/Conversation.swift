@@ -13,15 +13,23 @@ struct ConversationView: View {
     /// The visible height, so the empty space under a short conversation moves the panel too.
     @State private var viewport: CGFloat = 0
 
+    /// How much of a question being edited, and its answer, still shows.
+    static let replacedOpacity = 0.35
+
     var body: some View {
         let session = model.session
+        let messages = session.conversation.messages
+        // While the latest question is being edited, it and its answer are dimmed: sending
+        // replaces them.
+        let replacedFrom = session.editing.flatMap { id in messages.firstIndex { $0.id == id } } ?? messages.count
         ScrollView(.vertical) {
             VStack(alignment: .leading, spacing: 24) {
-                ForEach(session.conversation.messages) { message in
+                ForEach(Array(messages.enumerated()), id: \.element.id) { index, message in
                     if message.role == .user {
-                        UserMessageView(message: message)
+                        UserMessageView(message: message, isLast: message.id == session.lastQuestion?.id, replaced: index >= replacedFrom)
                     } else {
                         ReplyView(message: message, isCurrent: message.id == session.lastReply?.id)
+                            .opacity(index >= replacedFrom ? Self.replacedOpacity : 1)
                     }
                 }
             }
@@ -76,13 +84,34 @@ struct ConversationView: View {
 }
 
 /// The reader's own message, on the right: images on their own, text on a plate of lit cells.
+/// The latest question shows an edit key to its left under the pointer (with a backend that takes
+/// the whole conversation each time); while it is being edited, a key to cancel.
 private struct UserMessageView: View {
     @Environment(PanelModel.self) private var model
     let message: Message
+    let isLast: Bool
+    /// Being edited: sending replaces it.
+    let replaced: Bool
+    @State private var hot = false
 
     var body: some View {
+        let s = model.strings
+        let session = model.session
+        HStack(alignment: .bottom, spacing: 8) {
+            Spacer(minLength: 0)
+            if isLast, session.editing == message.id {
+                TextKey(id: "cancel-edit", title: s.cancelEditing) { model.cancelEditing() }
+            } else if isLast, hot, session.canEditLastQuestion {
+                TextKey(id: "edit-question", title: s.editQuestion) { model.editLastQuestion() }
+            }
+            content.opacity(replaced ? ConversationView.replacedOpacity : 1)
+        }
+        .onHover { hot = $0 }
+    }
+
+    private var content: some View {
         let colors = model.colors
-        VStack(alignment: .trailing, spacing: 8) {
+        return VStack(alignment: .trailing, spacing: 8) {
             ForEach(message.attachments) { attachment in
                 VStack(alignment: .trailing, spacing: 8) {
                     Thumbnail(image: model.thumbnails[attachment.id], width: 160, height: 96)
@@ -101,12 +130,11 @@ private struct UserMessageView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     // The whole plate is the text's: a press on its edge selects, never moves the panel.
                     .contentShape(Rectangle())
-                    .boardPlate("user-\(message.id)")
+                    .boardPlate("user-\(message.id)", value: replaced ? 0.1 : 0.27)
             }
         }
         // About three quarters of the panel's width, so a wider panel gives the question room too.
         .frame(maxWidth: max(240, (model.settings.panelWidth - 48) * 0.78), alignment: .trailing)
-        .frame(maxWidth: .infinity, alignment: .trailing)
     }
 }
 

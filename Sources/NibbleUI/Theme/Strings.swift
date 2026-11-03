@@ -41,6 +41,8 @@ struct Strings {
     var copy: String { t("复制", "Copy") }
     var copied: String { t("已复制", "Copied") }
     var retry: String { t("重试", "Retry") }
+    var editQuestion: String { t("编辑", "Edit") }
+    var cancelEditing: String { t("取消编辑", "Cancel edit") }
     var setUpService: String { t("还没设置好服务", "No service set up yet") }
     var goSetUp: String { t("去设置", "Set up") }
     var allow: String { t("允许", "Allow") }

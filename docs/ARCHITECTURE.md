@@ -186,8 +186,15 @@ a hidden panel draws nothing. The main window at its default size (about 5,700 c
 Implemented in `NibbleUI/Panel`:
 
 - The hotkey summons the panel when hidden, refocuses it when visible but unfocused, and puts it
-  away when focused. Esc closes the source menu, leaves the conversation page, or puts the panel
-  away.
+  away when focused. Esc closes the source menu, leaves the conversation page, stops editing a
+  question, or puts the panel away.
+- The latest question can be edited with a backend that takes the whole conversation each time
+  (a model API): under the pointer an Edit key shows to its left; it puts the question's text and
+  images back in the composer (what was being typed comes back on cancel), dims the question and
+  its answer, and sending replaces them (`ConversationSession.editLastQuestion`). Hermes keeps the
+  conversation in its own session and its API server cannot take a turn back
+  (`ChatBackend.keepsConversation`), so its conversations offer no Edit key; switching to Hermes
+  mid-edit ends the edit.
 - Empty, the panel is the composer alone (the bar, six cells tall, seven at the large text size);
   sending unfolds it upward into the chat, the bar staying where it is, as the send's band of light
   rises. The chat keeps one height whatever its content, remembered (`Settings.panelHeight`, 240–800

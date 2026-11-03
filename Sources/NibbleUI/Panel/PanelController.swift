@@ -267,12 +267,15 @@ public final class PanelController {
         dismiss()
     }
 
-    /// Esc: closes the menu, leaves the conversation page, or puts the panel away.
+    /// Esc: closes the menu, leaves the conversation page, stops editing a question, or puts the
+    /// panel away.
     private func cancel() {
         if model.menuOpen {
             model.menuOpen = false
         } else if model.page == .sheet {
             model.closeSheet()
+        } else if model.session.editing != nil {
+            model.cancelEditing()
         } else {
             dismiss()
         }

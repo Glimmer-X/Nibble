@@ -9,9 +9,14 @@ public protocol ChatBackend: Sendable {
     func respond(to request: ChatRequest) -> AsyncThrowingStream<ChatEvent, any Error>
     /// Answers an approval the backend asked for during a reply (`ChatEvent.approval`).
     func answer(_ approval: Approval, with answer: ApprovalAnswer) async throws
+    /// The backend keeps the conversation on its side (Hermes) rather than taking it whole with
+    /// every request, so a question it has answered cannot be taken back and asked differently.
+    var keepsConversation: Bool { get }
 }
 
 extension ChatBackend {
+    public var keepsConversation: Bool { false }
+
     public func answer(_ approval: Approval, with answer: ApprovalAnswer) async throws {
         throw BackendError.unsupported
     }

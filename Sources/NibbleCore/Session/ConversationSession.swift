@@ -43,7 +43,15 @@ public final class ConversationSession {
     /// Summoning within this window of the last activity continues the conversation.
     public var continueWindow: Duration
     /// The backend for the next reply. A reply in progress finishes with the one it started with.
-    @ObservationIgnored public var backend: any ChatBackend
+    /// One that keeps the conversation on its side ends any editing.
+    @ObservationIgnored public var backend: any ChatBackend {
+        didSet { if backend.keepsConversation { cancelEditing() } }
+    }
+    /// The question being edited: its text and images are in the draft, and sending replaces it
+    /// and the answer after it.
+    public private(set) var editing: Message.ID?
+    /// What was in the composer when editing began, put back if it is cancelled.
+    @ObservationIgnored private var draftBeforeEditing: (text: String, attachments: [Attachment])?
     /// Who answers the next question (the Hermes profile, the persona or the model), kept with the
     /// conversation.
     @ObservationIgnored public var persona: String?
@@ -98,6 +106,18 @@ public final class ConversationSession {
         conversation.messages.last { $0.role == .assistant }
     }
 
+    /// The latest question.
+    public var lastQuestion: Message? {
+        conversation.messages.last { $0.role == .user }
+    }
+
+    /// The latest question can be edited and asked again: no reply is on its way, and the backend
+    /// takes the whole conversation with each request. A backend that keeps the conversation on
+    /// its side (Hermes) would still remember the old question.
+    public var canEditLastQuestion: Bool {
+        !isResponding && !backend.keepsConversation && lastQuestion != nil
+    }
+
     // MARK: - Lifecycle
 
     /// Call when the panel is summoned. Starts a new conversation if the current one has been
@@ -124,6 +144,8 @@ public final class ConversationSession {
 
     private func clear() {
         failureNeedsSettings = false
+        editing = nil
+        draftBeforeEditing = nil
         conversation = Conversation(createdAt: now())
         draft = ""
         pendingAttachments = []
@@ -134,9 +156,33 @@ public final class ConversationSession {
     /// Shows a saved conversation in place of the current one.
     public func open(_ saved: Conversation) {
         if isResponding { abandonReply() }
+        cancelEditing()
         conversation = saved
         notice = nil
         lastActivity = now()
+    }
+
+    // MARK: - Editing the latest question
+
+    /// Puts the latest question back in the composer, its text and images, to be changed and sent
+    /// in its place. What was being typed comes back if editing is cancelled.
+    public func editLastQuestion() {
+        guard canEditLastQuestion, editing == nil, let question = lastQuestion else { return }
+        draftBeforeEditing = (draft, pendingAttachments)
+        draft = question.text
+        pendingAttachments = question.attachments
+        editing = question.id
+    }
+
+    /// Leaves the question as it was and puts back what was being typed.
+    public func cancelEditing() {
+        guard editing != nil else { return }
+        if let saved = draftBeforeEditing {
+            draft = saved.text
+            pendingAttachments = saved.attachments
+        }
+        draftBeforeEditing = nil
+        editing = nil
     }
 
     // MARK: - Composing
@@ -168,6 +214,12 @@ public final class ConversationSession {
 
     public func send() {
         guard canSend else { return }
+        // An edited question takes the place of the old one, and the answer goes with it.
+        if let editing, let index = conversation.messages.firstIndex(where: { $0.id == editing }) {
+            conversation.messages.removeSubrange(index...)
+        }
+        editing = nil
+        draftBeforeEditing = nil
         let userMessage = Message(
             role: .user,
             text: draft.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -184,6 +236,7 @@ public final class ConversationSession {
 
     /// Sends the last question again after its reply failed.
     public func retry() {
+        cancelEditing()
         guard !isResponding,
               let last = conversation.messages.last, last.role == .assistant, last.isFailed,
               let inputIndex = conversation.messages.lastIndex(where: { $0.role == .user })

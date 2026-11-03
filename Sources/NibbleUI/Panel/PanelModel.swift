@@ -230,6 +230,16 @@ final class PanelModel {
         controller?.messageSent()
     }
 
+    /// The latest question goes back into the composer, which takes the keyboard.
+    func editLastQuestion() {
+        session.editLastQuestion()
+        controller?.focusComposer()
+    }
+
+    func cancelEditing() {
+        session.cancelEditing()
+    }
+
     func answer(_ answer: ApprovalAnswer) {
         session.answer(answer)
     }

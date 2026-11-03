@@ -115,6 +115,63 @@ import Testing
         #expect(saved.messages.last?.text == "partial")
     }
 
+    @Test func anEditedQuestionTakesThePlaceOfTheOldOne() async throws {
+        let backend = StubBackend(events: [.text("answer")])
+        let session = makeSession(backend)
+        session.draft = "first"
+        session.send()
+        await session.waitUntilIdle()
+        session.draft = "secnod"
+        session.send()
+        await session.waitUntilIdle()
+
+        session.draft = "half typed"
+        #expect(session.canEditLastQuestion)
+        session.editLastQuestion()
+        #expect(session.draft == "secnod")
+        #expect(session.editing == session.lastQuestion?.id)
+        session.draft = "second"
+        session.send()
+        await session.waitUntilIdle()
+
+        #expect(session.conversation.messages.map(\.text) == ["first", "answer", "second", "answer"])
+        #expect(session.editing == nil)
+        // The model never sees the old question.
+        let request = try #require(backend.requests.last)
+        #expect(request.history.map(\.text) == ["first", "answer"])
+        #expect(request.input.text == "second")
+    }
+
+    @Test func cancellingAnEditPutsTheDraftBack() async {
+        let session = makeSession(StubBackend(events: [.text("answer")]))
+        session.draft = "question"
+        session.send()
+        await session.waitUntilIdle()
+        session.draft = "half typed"
+        session.editLastQuestion()
+        session.draft = "changed"
+        session.cancelEditing()
+        #expect(session.draft == "half typed")
+        #expect(session.editing == nil)
+        #expect(session.conversation.messages.map(\.text) == ["question", "answer"])
+    }
+
+    @Test func aBackendThatKeepsTheConversationCannotTakeAQuestionBack() async {
+        let session = makeSession(StubBackend(events: [.text("answer")]))
+        session.draft = "question"
+        session.send()
+        await session.waitUntilIdle()
+        session.editLastQuestion()
+        #expect(session.editing != nil)
+        // Switching to Hermes, say, mid-edit ends the edit.
+        session.backend = StubBackend(events: [], keepsConversation: true)
+        #expect(session.editing == nil)
+        #expect(session.draft == "")
+        #expect(!session.canEditLastQuestion)
+        session.editLastQuestion()
+        #expect(session.editing == nil)
+    }
+
     @Test func aReplyThatNeedsSettingsSaysSo() async {
         let session = makeSession(StubBackend(events: [], failure: BackendError.notConfigured))
         session.draft = "q"
@@ -328,11 +385,13 @@ final class StubBackend: ChatBackend, @unchecked Sendable {
     private let holdOpen: Bool
     private let lock = NSLock()
     private var recorded: [ChatRequest] = []
+    let keepsConversation: Bool
 
-    init(events: [ChatEvent], failure: (any Error)? = nil, holdOpen: Bool = false) {
+    init(events: [ChatEvent], failure: (any Error)? = nil, holdOpen: Bool = false, keepsConversation: Bool = false) {
         self.events = events
         self.failure = failure
         self.holdOpen = holdOpen
+        self.keepsConversation = keepsConversation
     }
 
     var requests: [ChatRequest] { lock.withLock { recorded } }
