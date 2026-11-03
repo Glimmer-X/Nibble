@@ -11,6 +11,10 @@ Research done on 2026-10-31 against the macOS 27.0 SDK (Xcode 27.0) on macOS 27.
   later desynchronises the window server and breaks typing (FB16484811).
 - `collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle, .stationary]`.
   Combining `.canJoinAllSpaces` with `.moveToActiveSpace` raises an exception.
+- An app with such a panel on screen has a window on every Space, so activating it does not take
+  the reader to the Space where its other windows are. An ordinary window left on another Space
+  comes forward there, out of sight; `.moveToActiveSpace` brings it to the reader's Space instead
+  (checked 2026-11-03).
 - Appearing over another app's full-screen Space needs the non-activating bit plus
   `.fullScreenAuxiliary` and no `.fullScreenPrimary` (Firefox PiP test, bug 1688932). A plain
   `NSWindow` never gets there. An accessory (`LSUIElement`) app satisfies this as well.

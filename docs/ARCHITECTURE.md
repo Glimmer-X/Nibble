@@ -270,9 +270,11 @@ Implemented in `NibbleUI/Panel`:
 ## The main window
 
 `NibbleUI/Main`: an ordinary window (system window buttons, resizable, remembered frame) whose
-content runs under a transparent title bar on a board of its own. The board plays the idle light
-chosen in settings (lava lamp, stars, a slow tunnel of stars, glimmer or ripples), sweeps a band of light
-across when the page changes, lights hovered rows and keys, and puts the selected sidebar item and
+content runs under a transparent title bar on a board of its own. Opened while it sits on another
+Space, it moves to the reader's (`.moveToActiveSpace`): Nibble's panels are on every Space, so
+activating Nibble would not switch Spaces and the window would come forward out of sight. The
+board plays the idle light chosen in settings (lava lamp, stars, a slow tunnel of stars, glimmer or
+ripples), sweeps a band of light across when the page changes, lights hovered rows and keys, and puts the selected sidebar item and
 history row, and the reader's text in a transcript, on plates of whole cells. While the window is
 covered or on another Space it draws nothing and looks again four times a second (its loop is
 never paused there, so the board cannot be left frozen); behind other windows it runs at 15 frames

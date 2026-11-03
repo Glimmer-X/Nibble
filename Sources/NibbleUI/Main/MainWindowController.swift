@@ -6,9 +6,10 @@ import SwiftUI
 /// on a light board of its own that fills the window.
 ///
 /// It is an ordinary window: it activates Nibble, has the system's window buttons, can be resized
-/// and goes into the Window menu. Its board plays its background motion (a setting), sweeps a band
-/// of light across when the page changes, and lights the controls and plates the views report; it
-/// draws nothing while the window is covered and stops when the window closes.
+/// and goes into the Window menu. Opened from another Space, it comes to the one the reader is on.
+/// Its board plays its background motion (a setting), sweeps a band of light across when the page
+/// changes, and lights the controls and plates the views report; it draws nothing while the window
+/// is covered and stops when the window closes.
 @MainActor
 public final class MainWindowController: NSObject, NSWindowDelegate {
     static let defaultSize = CGSize(width: 920, height: 620)
@@ -64,6 +65,10 @@ public final class MainWindowController: NSObject, NSWindowDelegate {
         window.titleVisibility = .hidden
         window.title = "Nibble"
         window.isReleasedWhenClosed = false
+        // Left open or closed on another Space, the window would otherwise be brought forward
+        // there, out of sight: Nibble's panels are on every Space, so activating it does not
+        // switch Spaces either.
+        window.collectionBehavior.insert(.moveToActiveSpace)
         window.contentMinSize = Self.minSize
         window.isMovableByWindowBackground = true
         window.delegate = self
