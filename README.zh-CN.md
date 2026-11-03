@@ -1,16 +1,20 @@
-<img src="docs/media/icon.png" width="96" alt="Nibble 图标" align="right">
-
-# Nibble
-
-[English](README.md)
-
-Nibble 是 Mac 上的快捷聊天浮窗。按下快捷键，浮窗出现在所有窗口之上，全屏应用里也一样，提问和回答都在这个小窗口里完成。文字背后是一块由方格灯组成的灯板，灯光随回答的进度变化，等待、思考、搜索、阅读网页、运行命令、输出、完成和出错各有各的样子。
-
-回答可以来自 [Hermes Agent](https://github.com/NousResearch/hermes-agent)，带着它的工具和记忆；也可以直接来自模型 API，支持兼容 OpenAI 的接口、Google Gemini 和 Anthropic Claude。
+<p align="right"><a href="README.md">English</a></p>
 
 <p align="center">
   <img src="docs/media/hero.webp" alt="四种主题色的 Nibble 浮窗：输入并发送问题，思考时星空变成时光隧道，允许并运行一条命令，请求失败后重试">
 </p>
+
+<p align="center">
+  <img src="docs/media/icon.png" width="72" alt="Nibble 图标">
+</p>
+
+<h1 align="center">Nibble</h1>
+
+<p align="center">Mac 上的快捷聊天浮窗，文字背后的灯板显示回答进行到哪一步。</p>
+
+按下快捷键，浮窗出现在所有窗口之上，全屏应用里也一样，提问和回答都在这个小窗口里完成。等待、思考、搜索、阅读网页、运行命令和输出时，灯板各有各的动法；回答完成和出错时，灯光也以不同的方式停下来。
+
+回答可以来自 [Hermes Agent](https://github.com/NousResearch/hermes-agent)，带着它的工具和记忆；也可以直接来自模型 API，比如兼容 OpenAI 的接口、Google Gemini 和 Anthropic Claude。
 
 ## 功能
 

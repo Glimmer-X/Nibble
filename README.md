@@ -1,16 +1,20 @@
-<img src="docs/media/icon.png" width="96" alt="Nibble icon" align="right">
-
-# Nibble
-
-[简体中文](README.zh-CN.md)
-
-Nibble is a quick chat panel for the Mac. A shortcut opens it over whatever you are doing, full-screen apps included, and the answer arrives in the same small window. Behind the text sits a board of square lights, and its motion shows what the reply is doing: waiting, thinking, searching the web, reading a page, running a command, writing, finished or failed.
-
-Answers come from [Hermes Agent](https://github.com/NousResearch/hermes-agent) with its tools and memory, or straight from a model API: any OpenAI-compatible endpoint, Google Gemini or Anthropic Claude.
+<p align="right"><a href="README.zh-CN.md">简体中文</a></p>
 
 <p align="center">
   <img src="docs/media/hero.webp" alt="Four Nibble panels in four colour themes: a question typed and sent, thinking turning into a tunnel of stars, a command allowed and running, a failed request retried">
 </p>
+
+<p align="center">
+  <img src="docs/media/icon.png" width="72" alt="Nibble icon">
+</p>
+
+<h1 align="center">Nibble</h1>
+
+<p align="center">A quick chat panel for the Mac, with a board of lights that shows what the reply is doing.</p>
+
+A shortcut opens the panel over whatever you are doing, full-screen apps included, and the answer arrives in the same small window. Behind the text, the lights move one way while the reply waits, another while it thinks, searches the web, reads a page, runs a command or writes, and they settle differently when it finishes or fails.
+
+Answers come from [Hermes Agent](https://github.com/NousResearch/hermes-agent) with its tools and memory, or straight from a model API such as an OpenAI-compatible endpoint, Google Gemini or Anthropic Claude.
 
 ## Features
 
