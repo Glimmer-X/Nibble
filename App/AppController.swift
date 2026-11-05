@@ -155,9 +155,16 @@ final class AppController {
         if next.hotKey != previous.hotKey { registerHotKey(next.hotKey) }
     }
 
+    /// Runs driven by a script (the self-test, the demo's recording, screenshots) leave the shortcut
+    /// alone: when two apps register one combination only one of them gets it, and such a run must
+    /// not take it from the Nibble in use, not even after it quits.
+    private static let scripted = ["NibbleSelfTest", "NibbleDemo", "NibbleWindowFile"]
+        .contains { UserDefaults.standard.string(forKey: $0) != nil }
+
     private func registerHotKey(_ combo: KeyCombo) {
         hotKey?.unregister()
         hotKey = nil
+        guard !Self.scripted else { return }
         do {
             hotKey = try GlobalHotKey(combo) { [weak self] in self?.interface.hotKeyPressed() }
         } catch {

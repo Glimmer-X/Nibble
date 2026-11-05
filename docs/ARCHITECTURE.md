@@ -460,7 +460,9 @@ window on a page (also `about`), `-NibblePage sheet` the panel's conversation pa
 front is once it has settled (scripts/shot.sh); `-NibbleSection app` scrolls settings to a
 section; `-NibbleRelease 0.2.0` pretends that version is out, to see its notice (runs answered from
 a script look for no release otherwise); `-NibbleSelfTest <file>` runs the self-test of the
-panel and the main window (see `scripts/check.sh`). For screenshots outside scripts/shot.sh, point
+panel and the main window (see `scripts/check.sh`). Runs with `-NibbleSelfTest`, `-NibbleDemo` or
+`-NibbleWindowFile` register no global shortcut, so they never take it from the Nibble in use. For
+screenshots outside scripts/shot.sh, point
 `NIBBLE_DATA_DIR` at a folder outside ~/Documents, ~/Desktop and ~/Downloads, which macOS guards
 with a permission prompt.
 
