@@ -35,6 +35,12 @@ final class BoardView: MTKView {
     var running = false {
         didSet { link?.isPaused = !running }
     }
+    /// Whether the next picture goes on screen with the window's own change (its frame moved in
+    /// this frame) instead of on its own: then the cells and the window's edges arrive together
+    /// and the cells never sit a frame off the side that stays put.
+    var presentsWithWindow = false {
+        didSet { (layer as? CAMetalLayer)?.presentsWithTransaction = presentsWithWindow }
+    }
     /// How many frames a second to ask for.
     var framesPerSecond = 60 {
         didSet { if framesPerSecond != oldValue { link?.preferredFrameRateRange = Self.range(framesPerSecond) } }
@@ -144,8 +150,14 @@ final class BoardView: MTKView {
         encoder.setFragmentTexture(texture, index: 0)
         encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
         encoder.endEncoding()
-        buffer.present(drawable)
-        buffer.commit()
+        if presentsWithWindow {
+            buffer.commit()
+            buffer.waitUntilScheduled()
+            drawable.present()
+        } else {
+            buffer.present(drawable)
+            buffer.commit()
+        }
     }
 
     private func texture() -> MTLTexture? {

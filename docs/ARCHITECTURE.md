@@ -144,6 +144,10 @@ can get and pinned to its top, so it never resizes while the panel unfolds or is
 the size is between whole cells, the scene and the shader shift the rows and columns by the
 remainder (`BoardScene.shift`, `BoardView.shift`): the cells stay put relative to the side that
 does not move, the bar's while the chat unfolds, the opposite side's while an edge is dragged.
+A drag only records the size it asks for; the window takes it at the board's next frame, and
+whenever the window's frame changes in a frame the board's picture is presented with that change
+(`BoardView.presentsWithWindow`, Core Animation's `presentsWithTransaction`) rather than on its
+own, so the cells never sit a frame off the side that stays put.
 
 Frames come from a display link each board view owns (`NSView.displayLink`, common run loop
 modes), which calls MTKView's `draw()`; MTKView's own timer is never used. After hours of running
@@ -205,7 +209,8 @@ Implemented in `NibbleUI/Panel`:
   the bar only sideways); the dragged sides follow the pointer exactly, read from the events' own
   screen positions, the opposite sides stay put, and the size settles on whole cells when let go.
   The edge under the pointer lights its outer row of cells, brighter while dragged; a corner is
-  brightest at the corner and fades along both sides. Closing (×, Esc, the hotkey) folds the chat
+  brightest at the corner and fades along both sides; each of its cells eases to its own light,
+  which only adds to what the board shows there. Closing (×, Esc, the hotkey) folds the chat
   back down into the bar and fades it out at the bar's height; summoning unfolds it again. New chat
   folds it into the bar and starts over.
 - The panel opens where the reader last left it: the bar's bottom left corner is remembered across
@@ -258,7 +263,11 @@ Implemented in `NibbleUI/Panel`:
   leaving room for the header's keys; a click opens the source menu (`SourceMenu`, shared with the
   menu bar panel and the main window): the services with their models, the personas of the one in
   use, and a way to settings to manage personas.
-- Images can be pasted into the input or dropped on the panel; the capture key attaches the
+- Images can be pasted into the input or dropped anywhere on the panel, as files, image data or
+  files the source app promises (a screenshot's thumbnail, Photos): `ImageIntake` reads every form,
+  the panel's content view (`PanelContentView`) takes the drops and the input hands it its own image
+  drags. The board lights where an image is held, and the light goes once no button is held, however
+  the drag ended. The capture key attaches the
   display under the panel without Nibble on it (Screen Recording permission). Images are scaled to
   at most 1568 px and sent as PNG (screenshots, drawings) or JPEG (photos).
 - The header's keys are new chat (+), the conversation page (=), collapse (a block gone into the

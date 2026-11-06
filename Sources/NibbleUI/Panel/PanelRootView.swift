@@ -1,6 +1,5 @@
 import NibbleCore
 import SwiftUI
-import UniformTypeIdentifiers
 
 /// Everything that floats on the board: the chat page (header, conversation, composer), the
 /// conversation page behind the menu key, the source menu, the strip the chat folds into, and the
@@ -54,7 +53,6 @@ struct PanelRootView: View {
         .overlay { Rectangle().strokeBorder(colors.rim, lineWidth: 1).allowsHitTesting(false) }
         .foregroundStyle(colors.ink)
         .environment(\.colorScheme, model.appearance == .dark ? .dark : .light)
-        .onDrop(of: [.fileURL, .image], delegate: ImageDrop(model: model))
     }
 }
 
@@ -179,36 +177,3 @@ struct CellSurface: View {
     }
 }
 
-/// Images dropped on the panel: the board lights where the file is while it is dragged.
-private struct ImageDrop: DropDelegate {
-    let model: PanelModel
-
-    func validateDrop(info: DropInfo) -> Bool { info.hasItemsConforming(to: [.fileURL, .image]) }
-
-    func dropUpdated(info: DropInfo) -> DropProposal? {
-        model.registry.drop = info.location
-        return DropProposal(operation: .copy)
-    }
-
-    func dropExited(info: DropInfo) { model.registry.drop = nil }
-
-    func performDrop(info: DropInfo) -> Bool {
-        model.registry.drop = nil
-        let providers = info.itemProviders(for: [.fileURL])
-        for provider in providers {
-            _ = provider.loadObject(ofClass: URL.self) { url, _ in
-                guard let url else { return }
-                Task { @MainActor in model.attach(files: [url]) }
-            }
-        }
-        if providers.isEmpty {
-            for provider in info.itemProviders(for: [.image]) {
-                provider.loadDataRepresentation(forTypeIdentifier: UTType.image.identifier) { data, _ in
-                    guard let data else { return }
-                    Task { @MainActor in model.attach(data: data, name: nil) }
-                }
-            }
-        }
-        return true
-    }
-}

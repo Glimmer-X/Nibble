@@ -63,10 +63,13 @@ public final class PanelController {
     private var opening = 0
     /// The reader is dragging an edge or corner: which sides, and where the drag started.
     private var sizing: (sides: PanelEdges.Sides, mouse: NSPoint, frame: NSRect)?
+    /// The frame the drag asked for since the last frame; the window takes it at the next one.
+    private var pendingFrame: NSRect?
     private let edges = PanelEdges()
-    /// How bright the lit edge is (eases in and out), and which sides it shows.
-    private var rimLevel = 0.0
-    private var rimSides: PanelEdges.Sides = []
+    /// The lit edge's cells, by side and place along it (`rim`), each easing to its own light;
+    /// whether any is still on its way.
+    private var rimCells: [Int: Double] = [:]
+    private var rimEasing = false
     private var moveObserver: Any?
     private var inputSourceObserver: Any?
     private var snapNext = true
@@ -108,7 +111,7 @@ public final class PanelController {
         boardView = BoardView(board: board)
         model.controller = self
 
-        let container = FlippedView(frame: NSRect(x: 0, y: 0, width: width, height: height))
+        let container = PanelContentView(frame: NSRect(x: 0, y: 0, width: width, height: height))
         container.wantsLayer = true
         container.layer?.masksToBounds = true
         if let boardView {
@@ -135,6 +138,11 @@ public final class PanelController {
         edges.onEnd = { [weak self] in self?.endResize() }
         container.addSubview(edges)
         panel.contentView = container
+        container.accepts = { [weak self] in self?.model.mini == false }
+        container.onHover = { [weak self] point in self?.model.registry.drop = point }
+        container.onImages = { [weak self] items in
+            for item in items { self?.model.attach(data: item.data, name: item.name) }
+        }
         panel.isOpaque = true
         panel.onResignKey = { [weak self] in self?.focusLost() }
         panel.onCancel = { [weak self] in self?.cancel() }
@@ -334,8 +342,8 @@ public final class PanelController {
         return room
     }
 
-    private func rememberPlace() {
-        UserDefaults.standard.set([Double(panel.frame.minX), Double(bottom)], forKey: Self.placeKey)
+    private func rememberPlace(x: CGFloat? = nil) {
+        UserDefaults.standard.set([Double(x ?? panel.frame.minX), Double(bottom)], forKey: Self.placeKey)
     }
 
     /// The reader moved the panel: its bottom edge anchors later changes of height, and its bottom
@@ -589,7 +597,8 @@ public final class PanelController {
     }
 
     /// The pointer moved to `mouse` while dragging: the dragged sides follow it exactly, the
-    /// opposite ones stay where they are; the size stays within its limits and the screen.
+    /// opposite ones stay where they are; the size stays within its limits and the screen. The
+    /// window takes the size at the next frame, with the board drawn for it (see `frame()`).
     func resize(to mouse: NSPoint) {
         guard let (sides, start, from) = sizing else { return }
         let dx = (mouse.x - start.x).rounded()
@@ -613,7 +622,7 @@ public final class PanelController {
         width = Double(f.width)
         if model.view == .chat { height = Double(f.height) }
         bottom = f.minY
-        place(NSRect(x: f.minX, y: f.minY, width: f.width, height: CGFloat(height.rounded())))
+        pendingFrame = NSRect(x: f.minX, y: f.minY, width: f.width, height: CGFloat(height.rounded()))
     }
 
     /// Let go: the size settles on whole cells (the dragged sides moving, the others staying) and
@@ -622,7 +631,7 @@ public final class PanelController {
         guard let (sides, _, _) = sizing else { return }
         sizing = nil
         let P = board.look.pitch
-        var f = panel.frame
+        var f = pendingFrame ?? panel.frame
         let w = Self.clampWidth((Double(f.width) / P).rounded() * P)
         if sides.contains(.left) { f.origin.x = f.maxX - CGFloat(w) }
         f.size.width = CGFloat(w)
@@ -636,8 +645,8 @@ public final class PanelController {
             model.settings.panelHeight = h
         }
         bottom = f.minY
-        place(f)
-        rememberPlace()
+        pendingFrame = f
+        rememberPlace(x: f.minX)
     }
 
     private static func clampHeight(_ h: Double) -> Double {
@@ -668,9 +677,19 @@ public final class PanelController {
             panel.alphaValue = CGFloat(min(1, ease(openness) * 1.6))
         }
 
+        // A drag always holds the button down: with none held, no image is on its way, whatever
+        // the drop did or did not hear (a drag cancelled over the panel tells it nothing).
+        if model.registry.drop != nil, NSEvent.pressedMouseButtons == 0 { model.registry.drop = nil }
         followSystem()
         updateLight(date)
         noticeFinishedReply()
+        // The window changes size here rather than at each move of the pointer, so the window, its
+        // controls and the board's cells for the new size reach the screen in one step.
+        let shown = panel.frame
+        if let f = pendingFrame {
+            pendingFrame = nil
+            place(f)
+        }
         layout(dt)
         updatePage(date)
 
@@ -686,9 +705,10 @@ public final class PanelController {
             shownSpeed = model.session.tokensPerSecond(at: date)
         }
         let scene = scene(dt)
+        boardView?.presentsWithWindow = panel.frame != shown
         // Slow light needs only half the frames; waves, moments, typing and the panel's own
         // movement get all of them.
-        let busy = board.wantsFullRate || opening != 0 || sizing != nil || rimLevel > 0.003 && rimLevel < 0.999 || model.pageChange != nil || scrollGlow > 0.01
+        let busy = board.wantsFullRate || opening != 0 || sizing != nil || rimEasing || model.pageChange != nil || scrollGlow > 0.01
             || fold != nil || alertSpread > 0 && alertSpread < 1
             || abs(height - targetHeight()) > 0.5
             || model.registry.isEasing(lightTarget)
@@ -883,38 +903,65 @@ public final class PanelController {
     }
 
     /// The edge under the pointer lights its outer row of cells, brighter while dragged; a corner
-    /// is brightest at the corner and fades along both of its sides.
+    /// is brightest at the corner and fades along both of its sides. Each cell eases to its own
+    /// light, so moving from an edge onto a corner or off the panel fades instead of jumping; the
+    /// cells are kept by side and place along it, so a dragged edge's light moves with the edge.
+    /// The light only adds to what the board shows there.
     private func rim(_ s: inout BoardScene, dt: Double, shift: (x: Double, y: Double)) {
-        let sides = sizing?.sides ?? edges.lit
-        if !sides.isEmpty { rimSides = sides }
-        let goal = sizing != nil ? 0.42 : sides.isEmpty ? 0 : 0.3
-        rimLevel += (goal - rimLevel) * (1 - exp(-dt / 0.08))
-        if abs(rimLevel - goal) < 0.003 { rimLevel = goal }
-        guard rimLevel > 0.004, !rimSides.isEmpty else { return }
         let P = board.look.pitch
         // The whole cells inside the panel, in board coordinates.
         let c0 = Int((shift.x / P).rounded()), c1 = Int(((shift.x + width) / P).rounded()) - 1
         let r0 = Int((shift.y / P).rounded()), r1 = Int(((shift.y + height) / P).rounded()) - 1
-        guard c1 > c0, r1 > r0 else { return }
-        let corner = !rimSides.isDisjoint(with: [.top, .bottom]) && !rimSides.isDisjoint(with: .across)
-        func lamp(_ c: Int, _ r: Int, _ fade: Double) {
-            let v = rimLevel * fade
-            guard v > 0.004 else { return }
-            let rect = BoardScene.Rect(x0: Double(c) * P, y0: Double(r) * P, x1: Double(c + 1) * P, y1: Double(r + 1) * P)
-            s.plates.append(BoardScene.Plate(rect: rect, clip: nil, rose: false, value: v, snap: true))
+        guard c1 > c0, r1 > r0 else {
+            rimCells = [:]
+            rimEasing = false
+            return
         }
+        let cols = c1 - c0 + 1, rows = r1 - r0 + 1
+        let sides = sizing?.sides ?? edges.lit
+        let level = sizing != nil ? 0.42 : 0.3
+        let corner = !sides.isDisjoint(with: [.top, .bottom]) && !sides.isDisjoint(with: .across)
         // Along a side of `n` cells: even for an edge; from the corner's end fading out for a corner.
         func fade(_ i: Int, _ n: Int, fromStart: Bool) -> Double {
             guard corner else { return 1 }
             let d = Double(fromStart ? i : n - 1 - i) / Double(max(1, n - 1))
             return pow(1 - d, 1.6)
         }
-        let cols = c1 - c0 + 1, rows = r1 - r0 + 1
-        if rimSides.contains(.top) { for i in 0..<cols { lamp(c0 + i, r0, fade(i, cols, fromStart: rimSides.contains(.left))) } }
-        if rimSides.contains(.bottom) { for i in 0..<cols { lamp(c0 + i, r1, fade(i, cols, fromStart: rimSides.contains(.left))) } }
-        if rimSides.contains(.left) { for i in 0..<rows { lamp(c0, r0 + i, fade(i, rows, fromStart: rimSides.contains(.top))) } }
-        if rimSides.contains(.right) { for i in 0..<rows { lamp(c1, r0 + i, fade(i, rows, fromStart: rimSides.contains(.top))) } }
+        // Each side's cells counted from its top or left end.
+        let order: [(side: PanelEdges.Sides, n: Int)] = [(.top, 0), (.bottom, 1), (.left, 2), (.right, 3)]
+        var goals: [Int: Double] = [:]
+        for (side, n) in order where sides.contains(side) {
+            let across = side == .top || side == .bottom
+            let length = across ? cols : rows
+            let fromStart = across ? sides.contains(.left) : sides.contains(.top)
+            for i in 0..<length { goals[n * Self.rimSide + i] = level * fade(i, length, fromStart: fromStart) }
+        }
+        let k = 1 - exp(-dt / 0.08)
+        rimEasing = false
+        for key in Set(rimCells.keys).union(goals.keys) {
+            let goal = goals[key] ?? 0
+            var v = rimCells[key] ?? 0
+            v += (goal - v) * k
+            if abs(v - goal) < 0.003 { v = goal } else { rimEasing = true }
+            rimCells[key] = v > 0.004 ? v : nil
+        }
+        for (key, v) in rimCells {
+            let i = key % Self.rimSide
+            let (c, r) = switch key / Self.rimSide {
+            case 0: (c0 + i, r0)
+            case 1: (c0 + i, r1)
+            case 2: (c0, r0 + i)
+            default: (c1, r0 + i)
+            }
+            // A side that has grown shorter since.
+            guard c <= c1, r <= r1 else { continue }
+            let rect = BoardScene.Rect(x0: Double(c) * P, y0: Double(r) * P, x1: Double(c + 1) * P, y1: Double(r + 1) * P)
+            s.plates.append(BoardScene.Plate(rect: rect, clip: nil, rose: false, value: v, snap: true, adds: true))
+        }
     }
+
+    /// Room for each side's cells in `rimCells`' keys.
+    private static let rimSide = 100_000
 
     /// The light a control should have: keys glow when hovered or down, the send key's halo is on
     /// while there is something to send, choices glow under the pointer, the edge while dragged.
@@ -964,8 +1011,3 @@ public final class PanelController {
     }
 }
 
-/// A view whose origin is at the top left, so the board stays pinned to the panel's top edge
-/// while the panel's height changes.
-private final class FlippedView: NSView {
-    override var isFlipped: Bool { true }
-}

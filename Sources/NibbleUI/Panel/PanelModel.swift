@@ -357,14 +357,7 @@ final class PanelModel {
         }
     }
 
-    /// Images dropped on the panel or pasted into the input.
-    func attach(files: [URL]) {
-        for url in files {
-            guard let data = try? Data(contentsOf: url) else { continue }
-            attach(data: data, name: url.lastPathComponent)
-        }
-    }
-
+    /// An image dropped on the panel or pasted into the input (see `ImageIntake`).
     func attach(data: Data, name: String?) {
         guard let image = app.services.prepareImage(data) else { return }
         Task {

@@ -18,7 +18,7 @@ struct ComposerInput: NSViewRepresentable {
     let onSubmit: () -> Void
     /// A character was typed; the caret's middle in window coordinates (origin bottom left).
     let onType: (NSPoint) -> Void
-    let onImages: ([Data], [URL]) -> Void
+    let onImages: @MainActor @Sendable ([ImageIntake.Item]) -> Void
     /// An input method is composing (marked text not yet committed), or has stopped.
     var onComposing: (Bool) -> Void = { _ in }
 
@@ -240,31 +240,53 @@ final class ComposerTextView: NSTextView {
     }
 
     override var readablePasteboardTypes: [NSPasteboard.PasteboardType] {
-        [.fileURL, .png, .tiff, NSPasteboard.PasteboardType("public.jpeg"), NSPasteboard.PasteboardType("public.heic")]
-            + super.readablePasteboardTypes
+        [.fileURL] + ImageIntake.dataTypes + super.readablePasteboardTypes
     }
 
-    /// Pasting: image files and image data become attachments; anything else pastes as text. A
-    /// file copied in Finder also carries its icon as TIFF, so file URLs are read first.
+    /// Pasting: images become attachments; anything else pastes as text.
     override func paste(_ sender: Any?) {
-        let board = NSPasteboard.general
-        let urls = (board.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL]) ?? []
-        let images = urls.filter { url in
-            guard let type = try? url.resourceValues(forKeys: [.contentTypeKey]).contentType else { return false }
-            return type.conforms(to: .image)
-        }
-        if !images.isEmpty {
-            coordinator?.parent.onImages([], images)
-            return
-        }
-        if urls.isEmpty {
-            for type in [NSPasteboard.PasteboardType.png, NSPasteboard.PasteboardType("public.jpeg"), NSPasteboard.PasteboardType("public.heic"), .tiff] {
-                if let data = board.data(forType: type) {
-                    coordinator?.parent.onImages([data], [])
-                    return
-                }
-            }
-        }
+        if let onImages = coordinator?.parent.onImages, ImageIntake.read(.general, deliver: onImages) { return }
         pasteAsPlainText(sender)
+    }
+
+    // MARK: - Images dragged onto the field
+
+    // An image dragged here goes where the rest of the panel takes it, never into the text as a
+    // file's path; text dragged here goes into the text as usual.
+
+    private func imageTarget(_ sender: NSDraggingInfo?) -> PanelContentView? {
+        guard let sender, ImageIntake.carriesImages(sender.draggingPasteboard) else { return nil }
+        return window?.contentView as? PanelContentView
+    }
+
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        imageTarget(sender)?.draggingEntered(sender) ?? super.draggingEntered(sender)
+    }
+
+    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+        imageTarget(sender)?.draggingUpdated(sender) ?? super.draggingUpdated(sender)
+    }
+
+    override func draggingExited(_ sender: NSDraggingInfo?) {
+        guard let target = imageTarget(sender) else { return super.draggingExited(sender) }
+        target.draggingExited(sender)
+    }
+
+    override func prepareForDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        imageTarget(sender)?.prepareForDragOperation(sender) ?? super.prepareForDragOperation(sender)
+    }
+
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        imageTarget(sender)?.performDragOperation(sender) ?? super.performDragOperation(sender)
+    }
+
+    override func concludeDragOperation(_ sender: NSDraggingInfo?) {
+        guard let target = imageTarget(sender) else { return super.concludeDragOperation(sender) }
+        target.concludeDragOperation(sender)
+    }
+
+    override func draggingEnded(_ sender: NSDraggingInfo) {
+        guard let target = imageTarget(sender) else { return super.draggingEnded(sender) }
+        target.draggingEnded(sender)
     }
 }

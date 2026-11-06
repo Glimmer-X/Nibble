@@ -55,6 +55,9 @@ struct BoardScene {
         /// A band of brighter cells runs across the plate every few seconds (the notice of a new
         /// version).
         var glint = false
+        /// Light only added to what the board shows there, never darker (the panel's lit edge):
+        /// other plates set their cells to their own value.
+        var adds = false
     }
 
     /// The band of light that leads a new page in.
@@ -627,8 +630,7 @@ final class Board {
             for r in rows {
                 for c in columns {
                     guard inside(q.clip, (Double(c) + 0.5) * P, (Double(r) + 0.5) * P) else { continue }
-                    v[r * cols + c] = q.value
-                    self.tone[r * cols + c] = tone
+                    set(r * cols + c, q.value, tone, adds: q.adds)
                 }
             }
             return
@@ -648,10 +650,17 @@ final class Board {
                     let d = (x - band) / Self.glintWidth
                     value += Self.glintLight * exp(-d * d)
                 }
-                v[r * cols + c] = value
-                self.tone[r * cols + c] = tone
+                set(r * cols + c, value, tone, adds: q.adds)
             }
         }
+    }
+
+    /// A plate's light on cell `i`: its own value, or, for a plate that only adds light, the
+    /// brighter of its value and what is there.
+    @inline(__always) private func set(_ i: Int, _ value: Double, _ tone: Int8, adds: Bool) {
+        guard !adds || value > v[i] else { return }
+        v[i] = value
+        self.tone[i] = tone
     }
 
     /// Where a glinting plate's band is now: it crosses the plate, left to right, in the first

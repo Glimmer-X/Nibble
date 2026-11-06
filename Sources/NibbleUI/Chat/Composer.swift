@@ -51,9 +51,8 @@ struct ComposerView: View {
                         onLines: { lines = min(6, $0) },
                         onSubmit: { model.send() },
                         onType: { model.controller?.typed(at: $0) },
-                        onImages: { data, urls in
-                            for d in data { model.attach(data: d, name: nil) }
-                            model.attach(files: urls)
+                        onImages: { items in
+                            for item in items { model.attach(data: item.data, name: item.name) }
                         },
                         onComposing: { composing = $0 }
                     )
