@@ -220,6 +220,11 @@ Implemented in `NibbleUI/Panel`:
 - The panel may go anywhere on its screen but the menu bar, over the Dock too: it floats one level
   above the Dock (`FloatingPanel.aboveDock`). A drag stops at the top and bottom of that room
   (`FloatingPanel.room`, through `constrainFrameRect`) instead of being pulled back after each move.
+- macOS can leave the panel on one Space (most likely when a full-screen Space closes while it is
+  out), and showing it again does not bring it back. Whenever the panel shows or the reader
+  changes Space, a showing panel that is not on the reader's Space drops its rule to join every
+  Space and sets it again a tenth of a second later, which puts it back on all of them
+  (`FloatingPanel.joinEverySpaceAgain`, logged in the `panel` category).
 - The input's placeholder makes way as soon as anything is typed, an input method's unfinished
   text included.
 - The typing light answers every key an input method composes (pinyin before its characters go

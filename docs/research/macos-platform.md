@@ -15,6 +15,17 @@ Research done on 2026-10-31 against the macOS 27.0 SDK (Xcode 27.0) on macOS 27.
   the reader to the Space where its other windows are. An ordinary window left on another Space
   comes forward there, out of sight; `.moveToActiveSpace` brings it to the reader's Space instead
   (checked 2026-11-03).
+- macOS can leave such a panel on one Space while it keeps the rule (2026-11-07: the panel was on
+  desktop 2 only, most likely since a full-screen Space closed while it was out and macOS went
+  back to desktop 2). Ordering it front again, or setting the same `collectionBehavior` again,
+  leaves it there; `isOnActiveSpace` does report it. Dropping `.canJoinAllSpaces` and inserting it
+  again while the window shows puts it back on every Space, but only with the two changes some
+  50 ms or more apart: the window server takes them a moment later, and in one turn of the run
+  loop, or a few ms apart, they often cancel out (measured: next turn about half the time, 20 ms
+  28 of 32, 50 and 100 ms 32 of 32). Checked in an app with the window server's own view
+  (SkyLight `SLSCopySpacesForWindows`; `SLSRemoveWindowsFromSpaces` recreates the state, while
+  `SLSMoveWindowsToManagedSpace` does not move a window that joins every Space). Not under
+  `swift test`: there the rule's changes never move the window.
 - Appearing over another app's full-screen Space needs the non-activating bit plus
   `.fullScreenAuxiliary` and no `.fullScreenPrimary` (Firefox PiP test, bug 1688932). A plain
   `NSWindow` never gets there. An accessory (`LSUIElement`) app satisfies this as well.

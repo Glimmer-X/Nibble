@@ -1,4 +1,5 @@
 import AppKit
+import os
 
 /// The window Nibble lives in: a borderless panel that floats above other windows and the Dock on
 /// every Space, including other apps' full-screen Spaces, and takes keyboard input without
@@ -9,7 +10,11 @@ import AppKit
 ///   window server out of sync and breaks typing.
 /// - The panel may become key (to type) but never main, and the app is never activated:
 ///   activating would pull the user out of a full-screen Space.
+/// - macOS can leave the panel on one Space; it is put back on all of them when it shows or the
+///   reader changes Space (see `joinEverySpaceAgain`).
 final class FloatingPanel: NSPanel {
+    private static let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Nibble", category: "panel")
+
     /// Just above the Dock, so the panel can sit over it; below the menu bar and menus.
     static let aboveDock = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.dockWindow)) + 1)
 
@@ -47,6 +52,10 @@ final class FloatingPanel: NSPanel {
         isMovableByWindowBackground = false
         isReleasedWhenClosed = false
         animationBehavior = .utilityWindow
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self, selector: #selector(activeSpaceChanged(_:)),
+            name: NSWorkspace.activeSpaceDidChangeNotification, object: nil
+        )
     }
 
     override var canBecomeKey: Bool { takesKeyboard }
@@ -77,6 +86,40 @@ final class FloatingPanel: NSPanel {
         var frame = frameRect
         frame.origin.y = max(room.minY, min(frame.minY, room.maxY - frame.height))
         return frame
+    }
+
+    // MARK: - Every Space
+
+    override func orderFrontRegardless() {
+        super.orderFrontRegardless()
+        joinEverySpaceAgain()
+    }
+
+    @objc private func activeSpaceChanged(_ notification: Notification) {
+        joinEverySpaceAgain()
+    }
+
+    /// Whether the rule to join every Space is off for a moment, being set again.
+    private var rejoining = false
+
+    /// Puts a showing panel that is not on the reader's Space back on every Space.
+    ///
+    /// macOS can leave a window that joins every Space on just one of them: the panel stayed on
+    /// one desktop, most likely the one macOS went back to when a full-screen Space closed while
+    /// the panel was out. Showing it again does not undo that, nor does setting its rules again. The rule takes again when it is dropped and
+    /// set once more while the panel shows, far enough apart: the window server takes the change a
+    /// moment later, and set back within some 20 ms the two may cancel out. If it still misses,
+    /// the next showing or change of Space tries again.
+    private func joinEverySpaceAgain() {
+        guard isVisible, !isOnActiveSpace, !rejoining else { return }
+        Self.log.notice("The panel was left on one Space; it joins every Space again")
+        rejoining = true
+        collectionBehavior.remove(.canJoinAllSpaces)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+            guard let self else { return }
+            collectionBehavior.insert(.canJoinAllSpaces)
+            rejoining = false
+        }
     }
 
     // MARK: - The input method's windows
