@@ -144,113 +144,27 @@ struct MarkdownDocument: Equatable {
     }
 }
 
-/// An answer rendered on the 24 pt text rhythm. No boxes: code is tinted and set in, quotes are
-/// quiet and set in, list numbers are in the pixel face.
+/// An answer on the 24 pt text rhythm. No boxes: code is tinted and set in, quotes are quiet and
+/// set in, list numbers are in the pixel face. Its text is one selectable piece between images
+/// (`AnswerLayout`), so a drag selects across paragraphs, lists, tables and code.
 struct MarkdownView: View {
     @Environment(AppModel.self) private var model
     let document: MarkdownDocument
 
     var body: some View {
+        let ink = AnswerLayout.Ink(model.colors)
+        let pieces = AnswerLayout.pieces(of: document, ink: ink)
         VStack(alignment: .leading, spacing: 8) {
-            ForEach(document.blocks) { block in
-                blockView(block)
-                    .padding(.leading, block.quoted ? 16 : 0)
-                    .foregroundStyle(block.quoted ? model.colors.ink2 : model.colors.ink)
+            ForEach(pieces.indices, id: \.self) { i in
+                switch pieces[i] {
+                case .text(let text):
+                    AnswerText(text: text, links: ink.accent)
+                case .image(let url, let quoted):
+                    AnswerImage(url: url).padding(.leading, quoted ? 16 : 0)
+                }
             }
         }
-        .textSelection(.enabled)
-        // The text's whole block, as wide as its longest line, gaps between paragraphs included,
-        // belongs to the text: a press there selects or does nothing, never moves the window.
-        .contentShape(Rectangle())
         .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    @ViewBuilder
-    private func blockView(_ block: MarkdownDocument.Block) -> some View {
-        let colors = model.colors
-        switch block.kind {
-        case .paragraph:
-            Text(styled(block.text)).font(Typeface.message).rhythm()
-                .fixedSize(horizontal: false, vertical: true)
-        case .heading:
-            Text(styled(block.text)).font(Typeface.heading).rhythm(fontSize: Typeface.headingSize)
-                .padding(.top, 8)
-                .fixedSize(horizontal: false, vertical: true)
-        case .code:
-            ScrollView(.horizontal, showsIndicators: false) {
-                Text(String(block.text.characters).trimmingCharacters(in: .newlines))
-                    .font(Typeface.code)
-                    .foregroundStyle(colors.code)
-                    .rhythm(fontSize: Typeface.codeSize)
-                    .fixedSize()
-            }
-            .padding(.leading, 16)
-        case .item(let marker, let depth):
-            HStack(alignment: .firstTextBaseline, spacing: 0) {
-                Group {
-                    switch marker {
-                    case .number(let n):
-                        Text(String(format: "%02d", n)).pixelText().foregroundStyle(colors.ink2)
-                    case .bullet:
-                        Rectangle().fill(colors.ink2).frame(width: 4, height: 4).padding(.leading, 8)
-                            .alignmentGuide(.firstTextBaseline) { _ in 8 }
-                    case .none:
-                        Color.clear.frame(width: 1, height: 1)
-                    }
-                }
-                .frame(width: 32, alignment: .leading)
-                Text(styled(block.text)).font(Typeface.message).rhythm()
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .padding(.leading, CGFloat(depth - 1) * 32)
-        case .table(let header, let rows):
-            Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 0) {
-                if !header.isEmpty {
-                    GridRow {
-                        ForEach(header.indices, id: \.self) { i in
-                            Text(String(header[i].characters)).pixelText().foregroundStyle(colors.ink2)
-                                .padding(.bottom, 4)
-                        }
-                    }
-                }
-                ForEach(rows.indices, id: \.self) { r in
-                    GridRow {
-                        ForEach(rows[r].indices, id: \.self) { c in
-                            Text(styled(rows[r][c])).font(Typeface.table).rhythm(fontSize: Typeface.tableSize)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                    }
-                }
-            }
-            .padding(.vertical, 8)
-        case .image(let url):
-            AnswerImage(url: url)
-        case .rule:
-            Rectangle().fill(colors.ink3).frame(height: 1).padding(.vertical, 8)
-        }
-    }
-
-    /// Inline styles: strong, emphasis, code, links, struck text.
-    private func styled(_ text: AttributedString) -> AttributedString {
-        let colors = model.colors
-        var out = text
-        for run in text.runs {
-            let range = run.range
-            if let inline = run.inlinePresentationIntent {
-                if inline.contains(.code) {
-                    out[range].font = Typeface.code
-                    out[range].foregroundColor = colors.code
-                }
-                if inline.contains(.stronglyEmphasized) { out[range].font = .system(size: Typeface.messageSize, weight: .semibold) }
-                if inline.contains(.emphasized) { out[range].font = .system(size: Typeface.messageSize).italic() }
-                if inline.contains(.strikethrough) { out[range].strikethroughStyle = .single }
-            }
-            if run.link != nil {
-                out[range].foregroundColor = colors.accent
-                out[range].underlineStyle = .single
-            }
-        }
-        return out
     }
 }
 

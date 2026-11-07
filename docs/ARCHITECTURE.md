@@ -257,7 +257,12 @@ Implemented in `NibbleUI/Panel`:
   once it moves a few points, and a click there gives the composer the keyboard. Text and images
   are content in front of it: each answer's block (as wide as its longest line, the gaps between
   paragraphs included) and the reader's plates select, images drag out to other apps, keys take
-  their clicks. In the input only the typed text selects; the rest of the field, all of it while
+  their clicks. An answer's text is one `NSTextView` between images (`AnswerLayout`, TextKit 1 for
+  its tables), so a drag selects across paragraphs, lists, tables and code; its look is laid out
+  in the attributed string (the 24 pt rhythm as a fixed line height with the glyphs lifted where
+  SwiftUI's `rhythm()` put them, bullets and rules drawn by `AnswerLayoutManager`, table columns
+  as wide as their text unless the table is wider than the answer, code wrapping with its further
+  lines set in). Typing while the answer has the keyboard goes to the input. In the input only the typed text selects; the rest of the field, all of it while
   empty, moves the panel and a click there puts the caret.
 - The header's left shows the service over the persona in the pixel face's smaller 10 px cut,
   leaving room for the header's keys; a click opens the source menu (`SourceMenu`, shared with the
