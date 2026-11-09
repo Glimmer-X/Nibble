@@ -235,6 +235,11 @@ Implemented in `NibbleUI/Panel`:
   window (children go with their parent's Space and sit above it) and gives every one its Space
   rules for next time (`FloatingPanel.followInputMethod`); so too on a change of input source and on
   Caps Lock, which show the input source badge.
+- A press anywhere in the panel takes the keyboard before it goes on (`FloatingPanel.sendEvent`),
+  as ⌥Space does. Without it, coming back from another app, the first drag over the reader's own
+  message (SwiftUI selectable text, which does not take the first mouse) only fetched the keyboard
+  and selected nothing; the answer's text view takes the first mouse and was never affected.
+  Clicking another app's window gives the keyboard back as usual.
 - There is no pin: clicking elsewhere puts the panel away only while it is empty (no messages,
   draft or attachments).
 - The chat folds into a strip at its top right corner (`PanelStrip`; the header's collapse key,

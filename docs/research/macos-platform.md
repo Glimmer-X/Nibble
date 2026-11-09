@@ -36,6 +36,14 @@ Research done on 2026-10-31 against the macOS 27.0 SDK (Xcode 27.0) on macOS 27.
 - `canBecomeKey = true` (borderless panels default to false), `canBecomeMain = false`. Show with
   `orderFrontRegardless()` + `makeKey()`. Never call `NSApp.activate()` for the panel: activation
   makes macOS leave the full-screen Space.
+- A press on a non-key panel does give it the keyboard (2026-11-09), but AppKit hands that first
+  press only to views whose `acceptsFirstMouse` is true. SwiftUI's selectable `Text` says no, so a
+  drag over it selected nothing and ⌘C copied nothing; a second drag worked. `makeKey()` in the
+  panel's `sendEvent` before `super` makes the press an ordinary one. Once the panel has the
+  keyboard, `activate()` on the app in front does not take it back (that app is already active);
+  a click in its window does. Checked on the real panel with HID mouse events (click count 1, a
+  move first, a longer press — SwiftUI's selection ignores bare synthetic drags) and the
+  system-wide `kAXFocusedApplicationAttribute`.
 - `hidesOnDeactivate = false` explicitly.
 - Stage Manager: `.canJoinAllApplications` (macOS 13) is documented for floating overlays.
   **Unverified** with Stage Manager on.

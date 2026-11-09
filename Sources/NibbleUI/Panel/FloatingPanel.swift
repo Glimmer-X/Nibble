@@ -61,6 +61,15 @@ final class FloatingPanel: NSPanel {
     override var canBecomeKey: Bool { takesKeyboard }
     override var canBecomeMain: Bool { false }
 
+    /// A press anywhere in the panel takes the keyboard before it goes on. A window without the
+    /// keyboard hands its first press only to views that take the first mouse, and SwiftUI's
+    /// selectable text does not: back from another app, a drag over the reader's own message only
+    /// fetched the keyboard and selected nothing, so ⌘C had nothing to copy.
+    override func sendEvent(_ event: NSEvent) {
+        if event.type == .leftMouseDown, !isKeyWindow, canBecomeKey { makeKey() }
+        super.sendEvent(event)
+    }
+
     override func performMiniaturize(_ sender: Any?) {
         if let onMiniaturize { onMiniaturize() } else { super.performMiniaturize(sender) }
     }
