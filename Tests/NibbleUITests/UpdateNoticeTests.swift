@@ -87,6 +87,7 @@ import Testing
     final class NoProvider: BackendProvider {
         func backend(for settings: BackendSettings) -> any ChatBackend { NoBackend() }
         func profiles(for settings: BackendSettings) async -> [String] { [] }
+        func hermesModels(for settings: BackendSettings) async -> HermesModelOptions? { nil }
         func check(_ settings: BackendSettings) async -> ConnectionStatus { .connected }
         func keyState(for settings: BackendSettings) -> KeyState { .missing }
         func saveKey(_ key: String?, for settings: BackendSettings) throws {}

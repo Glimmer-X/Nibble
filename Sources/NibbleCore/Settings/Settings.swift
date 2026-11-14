@@ -219,10 +219,37 @@ public struct BackendSettings: Codable, Sendable, Equatable {
         public var address: String
         /// The Hermes profile that answers (its own personality, model and memory).
         public var profile: String
+        /// The model each profile answers with, by profile, when the reader picked one; a profile
+        /// left out answers with its own default. Sent with each question; Hermes's config is
+        /// left as it is.
+        public var models: [String: HermesModel]
+        /// Models the reader picked lately, the latest first (at most `recentLimit`).
+        public var recent: [HermesModel]
 
-        public init(address: String = "http://127.0.0.1:8642", profile: String = "default") {
+        public static let recentLimit = 5
+
+        public init(
+            address: String = "http://127.0.0.1:8642",
+            profile: String = "default",
+            models: [String: HermesModel] = [:],
+            recent: [HermesModel] = []
+        ) {
             self.address = address
             self.profile = profile
+            self.models = models
+            self.recent = recent
+        }
+
+        /// The model the profile in use answers with, if the reader picked one.
+        public var model: HermesModel? { models[profile] }
+
+        /// Puts `model` in use for the profile in use; nil goes back to the profile's default.
+        public mutating func choose(_ model: HermesModel?) {
+            models[profile] = model
+            guard let model else { return }
+            recent.removeAll { $0 == model }
+            recent.insert(model, at: 0)
+            recent = Array(recent.prefix(Self.recentLimit))
         }
 
         public init(from decoder: any Decoder) throws {
@@ -230,6 +257,20 @@ public struct BackendSettings: Codable, Sendable, Equatable {
             let c = try decoder.container(keyedBy: CodingKeys.self)
             address = try c.decodeIfPresent(String.self, forKey: .address) ?? defaults.address
             profile = try c.decodeIfPresent(String.self, forKey: .profile) ?? defaults.profile
+            models = (try? c.decodeIfPresent([String: HermesModel].self, forKey: .models)) ?? [:]
+            recent = Array(((try? c.decodeIfPresent([HermesModel].self, forKey: .recent)) ?? []).prefix(Self.recentLimit))
+        }
+    }
+
+    /// A model as Hermes names it: the provider it goes through (`gemini`, `openrouter`, a
+    /// provider of the reader's own) and the model's id there.
+    public struct HermesModel: Codable, Sendable, Hashable {
+        public var provider: String
+        public var model: String
+
+        public init(provider: String, model: String) {
+            self.provider = provider
+            self.model = model
         }
     }
 

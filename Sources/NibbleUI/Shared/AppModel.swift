@@ -59,6 +59,8 @@ final class AppModel {
 
     /// The Hermes profiles on offer (loaded while Hermes is in use).
     var profiles: [String] = []
+    /// What the Hermes profile in use can answer with (loaded while Hermes is in use).
+    var hermesModels: HermesModelOptions?
     var connection: ConnectionStatus?
     var keyState: KeyState = .missing
     /// The shortcut key is waiting for a new combination.
@@ -165,12 +167,85 @@ final class AppModel {
         settings.backend.kind = kind
     }
 
-    /// What a backend is set to, for menus: the model of an API ("Not set" without one), Hermes'
-    /// address.
+    /// What a backend is set to, for menus: the model of an API ("Not set" without one), the model
+    /// the Hermes profile answers with (its address until Hermes has said).
     func sourceDetail(_ kind: BackendSettings.Kind) -> String {
-        guard kind.isAPI else { return settings.backend.hermes.address.replacingOccurrences(of: "http://", with: "") }
+        guard kind.isAPI else {
+            return hermesModel?.model ?? settings.backend.hermes.address.replacingOccurrences(of: "http://", with: "")
+        }
         let model = settings.backend[api: kind].model
         return model.isEmpty ? strings.notSet : model
+    }
+
+    // MARK: - Hermes models
+
+    /// The model the Hermes profile in use answers with: the one the reader picked, or the
+    /// profile's own default.
+    var hermesModel: BackendSettings.HermesModel? {
+        settings.backend.hermes.model ?? hermesModels?.standard
+    }
+
+    /// One model the reader can pick for the Hermes profile in use; nil is the profile's default.
+    struct ModelChoice: Identifiable, Hashable {
+        let model: BackendSettings.HermesModel?
+        let title: String
+        var detail: String?
+        let selected: Bool
+        var id: String { model.map { "\($0.provider)/\($0.model)" } ?? "" }
+    }
+
+    /// A run of model choices under a heading (none for the first).
+    struct ModelGroup: Identifiable, Hashable {
+        let title: String?
+        let choices: [ModelChoice]
+        var id: String { title ?? "" }
+    }
+
+    /// The models for the Hermes profile in use: the profile's default and the ones picked lately,
+    /// then every provider's models, the provider in use first. The default model shows only as
+    /// "Default".
+    var modelGroups: [ModelGroup] {
+        let hermes = settings.backend.hermes
+        let options = hermesModels
+        let standard = options?.standard
+        let picked = hermes.model
+        func choice(_ model: BackendSettings.HermesModel, detail: String? = nil) -> ModelChoice {
+            ModelChoice(model: model, title: model.model, detail: detail, selected: model == picked)
+        }
+        var first = [ModelChoice(model: nil, title: strings.defaultModel, detail: standard?.model, selected: picked == nil)]
+        let offered = Set(options?.providers.flatMap { p in p.models.map { BackendSettings.HermesModel(provider: p.id, model: $0) } } ?? [])
+        // The one in use stays on show even when Hermes no longer offers it.
+        let lately = ([picked].compactMap { $0 } + hermes.recent).filter { $0 != standard && (options == nil || offered.contains($0) || $0 == picked) }
+        var seen = Set<BackendSettings.HermesModel>()
+        for model in lately where seen.insert(model).inserted {
+            first.append(choice(model, detail: model.provider))
+        }
+        var groups = [ModelGroup(title: nil, choices: first)]
+        let current = (picked ?? standard)?.provider
+        let all = options?.providers ?? []
+        let providers = all.filter { $0.id == current } + all.filter { $0.id != current }
+        for provider in providers {
+            let choices = provider.models
+                .map { BackendSettings.HermesModel(provider: provider.id, model: $0) }
+                .filter { $0 != standard }
+                .map { choice($0) }
+            if !choices.isEmpty { groups.append(ModelGroup(title: provider.name, choices: choices)) }
+        }
+        return groups
+    }
+
+    /// Puts a model in use for the Hermes profile in use; nil, or its default model, goes back to
+    /// the default.
+    func choose(hermesModel model: BackendSettings.HermesModel?) {
+        settings.backend.hermes.choose(model == hermesModels?.standard ? nil : model)
+    }
+
+    func loadHermesModels() async {
+        let backend = settings.backend
+        let options = await provider.hermesModels(for: backend)
+        let now = settings.backend.hermes
+        guard now.address == backend.hermes.address, now.profile == backend.hermes.profile else { return }
+        hermesModels = options
     }
 
     /// The label kept with conversations and the system prompt, from the backend and persona in use.
@@ -196,7 +271,9 @@ final class AppModel {
         }
         if settings.backend != old.backend {
             session.backend = provider.backend(for: settings.backend)
-            if settings.backend.hermes.address != old.backend.hermes.address { profiles = [] }
+            let hermes = settings.backend.hermes, was = old.backend.hermes
+            if hermes.address != was.address { profiles = [] }
+            if hermes.address != was.address || hermes.profile != was.profile { hermesModels = nil }
             refreshBackendState()
         }
         applyPersona()
@@ -244,7 +321,10 @@ final class AppModel {
             let status = await provider.check(backend)
             guard !Task.isCancelled, backend == self.settings.backend else { return }
             connection = status
-            if status == .connected, backend.kind == .hermes { await loadProfiles() }
+            if status == .connected, backend.kind == .hermes {
+                await loadProfiles()
+                await loadHermesModels()
+            }
         }
     }
 

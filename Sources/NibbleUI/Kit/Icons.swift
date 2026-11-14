@@ -12,7 +12,7 @@ enum DotIcon: String, CaseIterable {
     // Large dots, 3 × 3: the panel's header and its strip.
     case add, menu, close, back, collapse, expand
     // Small: marks in text.
-    case check, cross, chevron, search
+    case check, cross, chevron, search, next, previous
 
     var rows: [String] {
         switch self {
@@ -32,13 +32,15 @@ enum DotIcon: String, CaseIterable {
         case .cross: ["#...#", ".#.#.", "..#..", ".#.#.", "#...#"]
         case .chevron: ["#...#", ".#.#.", "..#.."]
         case .search: ["###..", "#.#..", "###..", "...#.", "....#"]
+        case .next: ["#..", ".#.", "..#", ".#.", "#.."]
+        case .previous: ["..#", ".#.", "#..", ".#.", "..#"]
         }
     }
 
     var isLarge: Bool {
         switch self {
         case .capture, .plus, .bubble, .window, .power, .add, .menu, .close, .back, .collapse, .expand: true
-        case .check, .cross, .chevron, .search: false
+        case .check, .cross, .chevron, .search, .next, .previous: false
         }
     }
 

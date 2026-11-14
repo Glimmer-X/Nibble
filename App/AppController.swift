@@ -195,6 +195,7 @@ private final class ScriptedProvider: BackendProvider {
 
     func backend(for settings: BackendSettings) -> any ChatBackend { ScriptedBackend.named(script) }
     func profiles(for settings: BackendSettings) async -> [String] { await base.profiles(for: settings) }
+    func hermesModels(for settings: BackendSettings) async -> HermesModelOptions? { await base.hermesModels(for: settings) }
     func check(_ settings: BackendSettings) async -> ConnectionStatus { .connected }
     func keyState(for settings: BackendSettings) -> KeyState { base.keyState(for: settings) }
     func saveKey(_ key: String?, for settings: BackendSettings) throws { try base.saveKey(key, for: settings) }

@@ -173,6 +173,9 @@ struct Strings {
     var keyPlaceholder: String { t("粘贴密钥", "Paste a key") }
     var keySaved: String { t("已存进钥匙串", "In Keychain") }
     var model: String { t("模型", "Model") }
+    /// The Hermes profile's own model, in the model list.
+    var defaultModel: String { t("默认", "Default") }
+    var useDefaultModel: String { t("改回默认", "Use Default") }
     var connected: String { t("已连接", "Connected") }
     var checking: String { t("检查中…", "Checking…") }
     var unreachable: String { t("连不上", "Not reachable") }

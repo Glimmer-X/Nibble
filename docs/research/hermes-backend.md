@@ -43,6 +43,18 @@ The stream carries everything the panel shows:
 The Sessions API (`/api/sessions/{id}/chat/stream`) streams no reasoning and no status lines, so
 Nibble does not use it for turns.
 
+## Models
+
+A profile answers with the model in its `config.yaml` (`model.default` and `model.provider`).
+`GET /api/model/options?include_unconfigured=false` (under the profile's prefix) gives that default
+as `model` and `provider`, and the providers the profile is set up for, each with its `slug`, `name`
+and `models`; it is the list Hermes's own model picker shows. A turn takes another model when the
+body carries `provider` and `model`: Hermes uses it for that turn only, and a later turn may name
+another one in the same session (checked on 0.22.5). A `model` without a `provider` is ignored
+unless the server enables direct model requests. Nibble sends both when the reader picked a model
+for the profile, and nothing otherwise; Hermes's config is left as it is. A `/model` typed inside
+the session would win over the request.
+
 ## Approvals
 
 An `approval.request` carries the run, the request id, the command, the `choices` the client may

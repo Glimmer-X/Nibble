@@ -9,16 +9,21 @@ import NibbleCore
 /// the model's reasoning, tool calls (`hermes.tool.progress`), waits and retries
 /// (`hermes.status`), approvals (`approval.request`) and token usage. A profile (its own
 /// personality, model and memory) is reached under `/p/<profile>/`, each with its own key.
+/// A model the reader picked goes with each question as `provider` and `model`, which Hermes
+/// uses for that turn in place of the profile's default.
 /// Stopping closes the stream, which interrupts the run.
 public struct HermesBackend: ChatBackend {
     public let address: String
     public let profile: String
     public let apiKey: String?
+    /// The model to answer with; nil for the profile's own default.
+    public let model: BackendSettings.HermesModel?
 
-    public init(address: String, profile: String, apiKey: String?) {
+    public init(address: String, profile: String, apiKey: String?, model: BackendSettings.HermesModel? = nil) {
         self.address = address
         self.profile = profile
         self.apiKey = apiKey
+        self.model = model
     }
 
     /// Hermes keeps each conversation in its own session; its API server has no way to take a
@@ -92,10 +97,7 @@ public struct HermesBackend: ChatBackend {
         guard let url = endpoint("/v1/chat/completions"), hasKey else { throw BackendError.notConfigured }
         let session = sessionID(for: chat)
         continuation.yield(.remoteSession(Self.handle(profile: profile, session: session)))
-        let body: [String: Any] = [
-            "messages": [["role": "user", "content": Self.content(chat.input)]],
-            "stream": true,
-        ]
+        let body = Self.body(chat.input, model: model)
         var request = try HTTP.request(url, method: "POST", key: apiKey, json: body, accept: "text/event-stream")
         request.setValue(session, forHTTPHeaderField: "X-Hermes-Session-Id")
         let bytes = try await HTTP.stream(request)
@@ -138,6 +140,20 @@ public struct HermesBackend: ChatBackend {
         let profile = String(handle[..<slash])
         let session = String(handle[handle.index(after: slash)...])
         return profile.isEmpty || session.isEmpty ? nil : (profile, session)
+    }
+
+    /// The body of a turn: the new message, streamed, and the model when one was picked. Hermes
+    /// takes a `model` on its own only when its server allows it; with a `provider` always.
+    static func body(_ turn: ChatRequest.Turn, model: BackendSettings.HermesModel?) -> [String: Any] {
+        var body: [String: Any] = [
+            "messages": [["role": "user", "content": content(turn)]],
+            "stream": true,
+        ]
+        if let model {
+            body["provider"] = model.provider
+            body["model"] = model.model
+        }
+        return body
     }
 
     /// The new message: plain text, or text and images as parts.
@@ -249,6 +265,31 @@ public struct HermesBackend: ChatBackend {
     public func check() async throws {
         guard let url = endpoint("/v1/capabilities"), hasKey else { throw BackendError.notConfigured }
         _ = try await HTTP.json(try HTTP.request(url, key: apiKey))
+    }
+
+    // MARK: - Models
+
+    /// The models the profile can answer with: Hermes's own model picker list, of the providers
+    /// it is set up for.
+    public func modelOptions() async throws -> HermesModelOptions {
+        guard let url = endpoint("/api/model/options?include_unconfigured=false"), hasKey else { throw BackendError.notConfigured }
+        return Self.modelOptions(from: try await HTTP.json(try HTTP.request(url, key: apiKey)))
+    }
+
+    /// Reads `GET /api/model/options`: `model` and `provider` (the profile's default) and
+    /// `providers`, each with a `slug`, a `name` and its `models`.
+    static func modelOptions(from json: Any) -> HermesModelOptions {
+        let body = json as? [String: Any] ?? [:]
+        let model = body["model"] as? String ?? ""
+        let provider = body["provider"] as? String ?? ""
+        let providers = (body["providers"] as? [[String: Any]] ?? []).compactMap { p -> HermesModelOptions.Provider? in
+            guard let id = p["slug"] as? String, !id.isEmpty, p["authenticated"] as? Bool != false else { return nil }
+            let models = (p["models"] as? [Any] ?? []).compactMap { $0 as? String }.filter { !$0.isEmpty }
+            guard !models.isEmpty else { return nil }
+            return .init(id: id, name: (p["name"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? id, models: models)
+        }
+        let standard = model.isEmpty || provider.isEmpty ? nil : BackendSettings.HermesModel(provider: provider, model: model)
+        return HermesModelOptions(standard: standard, providers: providers)
     }
 
     // MARK: - Reading a turn

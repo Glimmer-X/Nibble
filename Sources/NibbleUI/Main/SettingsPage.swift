@@ -365,6 +365,7 @@ private struct BackendSection: View {
                     }
                     .padding(.vertical, 8)
                 }
+                Row(s.model) { HermesModelStatus() }
             } else {
                 Row(s.model) {
                     Field(id: "model", text: api(kind, \.model), placeholder: Self.modelPlaceholder(kind)).id(kind)
@@ -387,6 +388,24 @@ private struct BackendSection: View {
         case .gemini: "gemini-2.5-flash"
         case .anthropic: "claude-sonnet-5-5"
         case .openAI, .hermes: "deepseek-flash"
+        }
+    }
+}
+
+/// The model the Hermes profile answers with (picked in the source menu), and a key back to the
+/// profile's default when another was picked.
+private struct HermesModelStatus: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        let s = model.strings
+        let picked = model.settings.backend.hermes.model
+        Text(model.hermesModel?.model ?? s.defaultModel).pixelText().foregroundStyle(model.colors.ink)
+            .lineLimit(1).padding(.horizontal, 8)
+        if picked == nil, model.hermesModel != nil {
+            Text(s.defaultModel).pixelText().foregroundStyle(model.colors.ink3).padding(.leading, 8)
+        } else {
+            TextKey(id: "hermes-model-default", title: s.useDefaultModel, place: .main("body")) { model.choose(hermesModel: nil) }
         }
     }
 }

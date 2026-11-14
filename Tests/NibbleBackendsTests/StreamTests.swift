@@ -220,4 +220,56 @@ import Testing
         #expect(content.map { $0["type"] as? String } == ["image", "text"])
         #expect((content[0]["source"] as? [String: Any])?["media_type"] as? String == "image/jpeg")
     }
+
+    // MARK: Hermes models
+
+    @Test func aPickedHermesModelGoesWithTheQuestion() {
+        let turn = ChatRequest.Turn(role: .user, text: "hi")
+        let plain = HermesBackend.body(turn, model: nil)
+        #expect(plain["model"] == nil && plain["provider"] == nil)
+        let picked = HermesBackend.body(turn, model: .init(provider: "gemini", model: "gemini-4-argon"))
+        #expect(picked["provider"] as? String == "gemini")
+        #expect(picked["model"] as? String == "gemini-4-argon")
+        #expect(picked["stream"] as? Bool == true)
+    }
+
+    @Test func hermesModelOptionsAreReadFromItsPickerList() {
+        let json: [String: Any] = [
+            "model": "gemini-3.8-flash", "provider": "gemini",
+            "providers": [
+                ["slug": "gemini", "name": "Google AI Studio", "authenticated": true, "models": ["gemini-3.8-flash", "gemini-4-argon"]],
+                ["slug": "ollama-4090", "name": "", "models": ["qwen3.8:27b"]],
+                ["slug": "openai", "name": "OpenAI", "authenticated": false, "models": ["gpt-6"]],
+                ["slug": "empty", "name": "Empty", "models": []],
+            ],
+        ]
+        let options = HermesBackend.modelOptions(from: json)
+        #expect(options.standard == .init(provider: "gemini", model: "gemini-3.8-flash"))
+        #expect(options.providers.map(\.id) == ["gemini", "ollama-4090"])
+        #expect(options.providers[1].name == "ollama-4090")
+        #expect(HermesBackend.modelOptions(from: ["providers": []]).standard == nil)
+    }
+
+    @Test func hermesModelsArePickedPerProfileAndRememberedLately() throws {
+        var hermes = BackendSettings.Hermes(profile: "coding")
+        let a = BackendSettings.HermesModel(provider: "gemini", model: "a")
+        hermes.choose(a)
+        #expect(hermes.model == a)
+        hermes.profile = "writing"
+        #expect(hermes.model == nil)
+        for i in 0..<8 { hermes.choose(.init(provider: "p", model: "m\(i)")) }
+        hermes.choose(a)
+        #expect(hermes.recent.count == BackendSettings.Hermes.recentLimit)
+        #expect(hermes.recent.first == a)
+        hermes.choose(nil)
+        #expect(hermes.model == nil)
+        hermes.profile = "coding"
+        #expect(hermes.model == a)
+
+        // Settings saved before models were kept still load.
+        let old = try JSONDecoder().decode(BackendSettings.Hermes.self, from: Data(#"{"address":"http://h:1","profile":"x"}"#.utf8))
+        #expect(old.models.isEmpty && old.recent.isEmpty && old.profile == "x")
+        let back = try JSONDecoder().decode(BackendSettings.Hermes.self, from: JSONEncoder().encode(hermes))
+        #expect(back == hermes)
+    }
 }

@@ -1,8 +1,8 @@
 import Foundation
 import NibbleCore
 
-/// Makes the backend in use and tells the settings page about it: the Hermes profiles on offer,
-/// whether it answers, where its key comes from.
+/// Makes the backend in use and tells the settings page about it: the Hermes profiles and models
+/// on offer, whether it answers, where its key comes from.
 ///
 /// Keys: a key pasted into Nibble is kept in the Keychain (one per backend kind and address, and
 /// per Hermes profile). With Hermes on this Mac and no pasted key, the profile's own
@@ -22,7 +22,8 @@ public final class Backends: BackendProvider {
         let address = settings.address(kind)
         let model = settings[api: kind].model
         return switch kind {
-        case .hermes: HermesBackend(address: settings.hermes.address, profile: settings.hermes.profile, apiKey: key(for: settings))
+        case .hermes:
+            HermesBackend(address: settings.hermes.address, profile: settings.hermes.profile, apiKey: key(for: settings), model: settings.hermes.model)
         case .openAI: OpenAICompatibleBackend(address: address, model: model, apiKey: key(for: settings))
         case .gemini: GeminiBackend(address: address, model: model, apiKey: key(for: settings))
         case .anthropic: AnthropicBackend(address: address, model: model, apiKey: key(for: settings))
@@ -32,6 +33,13 @@ public final class Backends: BackendProvider {
     public func profiles(for settings: BackendSettings) async -> [String] {
         let profiles = hermesHome.profiles()
         return profiles.isEmpty ? [settings.hermes.profile] : profiles
+    }
+
+    public func hermesModels(for settings: BackendSettings) async -> HermesModelOptions? {
+        var hermes = settings
+        hermes.kind = .hermes
+        let backend = HermesBackend(address: settings.hermes.address, profile: settings.hermes.profile, apiKey: key(for: hermes))
+        return try? await backend.modelOptions()
     }
 
     public func check(_ settings: BackendSettings) async -> ConnectionStatus {
