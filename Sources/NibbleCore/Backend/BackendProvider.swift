@@ -11,6 +11,8 @@ public protocol BackendProvider: AnyObject {
     /// The models the Hermes profile in use can answer with, and its own default; nil when Hermes
     /// does not answer.
     func hermesModels(for settings: BackendSettings) async -> HermesModelOptions?
+    /// The models a model's API offers with these settings, by name; nil when it does not answer.
+    func models(for settings: BackendSettings) async -> [String]?
     /// Whether the backend answers and accepts the key.
     func check(_ settings: BackendSettings) async -> ConnectionStatus
     /// Where the key for these settings comes from.

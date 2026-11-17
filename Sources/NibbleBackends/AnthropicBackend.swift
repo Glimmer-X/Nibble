@@ -5,35 +5,56 @@ import NibbleCore
 ///
 /// Stateless: every request carries the whole conversation, the persona's instructions as
 /// `system`, images inline. The key goes in `x-api-key` with the API version. Token counts arrive
-/// at the start (input) and end (output) of the stream.
+/// at the start (input) and end (output) of the stream. A thinking level turns on adaptive
+/// thinking, shown as a summary, at that effort; off asks for no thinking at the lowest effort. A
+/// model that refuses either answers at its default.
 public struct AnthropicBackend: ChatBackend {
     /// The API's base address, `https://api.anthropic.com` unless a proxy is used.
     public let address: String
     public let model: String
     public let apiKey: String?
+    public let thinking: ThinkingLevel
 
     static let version = "2023-06-01"
     /// The longest answer asked for; every current model allows at least this much.
     static let maxTokens = 8192
+    /// With thinking asked for: room for the thinking and the answer (current models allow more).
+    static let maxTokensThinking = 32_000
 
-    public init(address: String, model: String, apiKey: String?) {
+    public init(address: String, model: String, apiKey: String?, thinking: ThinkingLevel = .standard) {
         self.address = address
         self.model = model
         self.apiKey = apiKey
+        self.thinking = thinking
     }
 
     public func respond(to request: ChatRequest) -> AsyncThrowingStream<ChatEvent, any Error> {
-        HTTP.reply(to: request) { request, continuation in try await stream(request, into: continuation) }
+        HTTP.reply(to: request) { request, continuation in
+            try await HTTP.withThinking(thinking) { level in try await stream(request, level: level, into: continuation) }
+        }
     }
 
-    private func stream(_ chat: ChatRequest, into continuation: AsyncThrowingStream<ChatEvent, any Error>.Continuation) async throws {
+    /// The `thinking` and `output_config` fields for a level (none for the model's default).
+    static func thinkingFields(_ level: ThinkingLevel) -> [String: Any] {
+        switch level {
+        case .standard:
+            [:]
+        case .off:
+            ["thinking": ["type": "disabled"], "output_config": ["effort": "low"]]
+        case .low, .medium, .high:
+            ["thinking": ["type": "adaptive", "display": "summarized"], "output_config": ["effort": level.rawValue]]
+        }
+    }
+
+    private func stream(_ chat: ChatRequest, level: ThinkingLevel, into continuation: AsyncThrowingStream<ChatEvent, any Error>.Continuation) async throws {
         guard !model.isEmpty, let url = HTTP.url(address, "/v1/messages") else { throw BackendError.notConfigured }
         var body: [String: Any] = [
             "model": model,
-            "max_tokens": Self.maxTokens,
+            "max_tokens": level == .standard ? Self.maxTokens : Self.maxTokensThinking,
             "stream": true,
             "messages": Self.messages(chat),
         ]
+        body.merge(Self.thinkingFields(level)) { $1 }
         if let instructions = chat.instructions { body["system"] = instructions }
         let request = try HTTP.request(url, method: "POST", key: apiKey, keyHeader: "x-api-key",
                                        headers: ["anthropic-version": Self.version], json: body, accept: "text/event-stream")

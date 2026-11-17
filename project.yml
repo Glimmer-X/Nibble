@@ -21,6 +21,8 @@ settings:
     CODE_SIGN_STYLE: Automatic
     ENABLE_HARDENED_RUNTIME: YES
     ENABLE_USER_SCRIPT_SANDBOXING: YES
+    # scripts/build.sh (builds for this Mac) sets NO: they never look for releases.
+    NIBBLE_CHECKS_FOR_UPDATES: "YES"
     MARKETING_VERSION: "0.1.5"
     CURRENT_PROJECT_VERSION: "6"
     LOCALIZATION_PREFERS_STRING_CATALOGS: YES

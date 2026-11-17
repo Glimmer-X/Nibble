@@ -18,12 +18,18 @@ public struct HermesBackend: ChatBackend {
     public let apiKey: String?
     /// The model to answer with; nil for the profile's own default.
     public let model: BackendSettings.HermesModel?
+    /// Sent as `model_options.reasoning_effort` for the turn; the default leaves the profile's.
+    public let thinking: ThinkingLevel
 
-    public init(address: String, profile: String, apiKey: String?, model: BackendSettings.HermesModel? = nil) {
+    public init(
+        address: String, profile: String, apiKey: String?, model: BackendSettings.HermesModel? = nil,
+        thinking: ThinkingLevel = .standard
+    ) {
         self.address = address
         self.profile = profile
         self.apiKey = apiKey
         self.model = model
+        self.thinking = thinking
     }
 
     /// Hermes keeps each conversation in its own session; its API server has no way to take a
@@ -97,7 +103,7 @@ public struct HermesBackend: ChatBackend {
         guard let url = endpoint("/v1/chat/completions"), hasKey else { throw BackendError.notConfigured }
         let session = sessionID(for: chat)
         continuation.yield(.remoteSession(Self.handle(profile: profile, session: session)))
-        let body = Self.body(chat.input, model: model)
+        let body = Self.body(chat.input, model: model, thinking: thinking)
         var request = try HTTP.request(url, method: "POST", key: apiKey, json: body, accept: "text/event-stream")
         request.setValue(session, forHTTPHeaderField: "X-Hermes-Session-Id")
         let bytes = try await HTTP.stream(request)
@@ -144,7 +150,7 @@ public struct HermesBackend: ChatBackend {
 
     /// The body of a turn: the new message, streamed, and the model when one was picked. Hermes
     /// takes a `model` on its own only when its server allows it; with a `provider` always.
-    static func body(_ turn: ChatRequest.Turn, model: BackendSettings.HermesModel?) -> [String: Any] {
+    static func body(_ turn: ChatRequest.Turn, model: BackendSettings.HermesModel?, thinking: ThinkingLevel = .standard) -> [String: Any] {
         var body: [String: Any] = [
             "messages": [["role": "user", "content": content(turn)]],
             "stream": true,
@@ -152,6 +158,9 @@ public struct HermesBackend: ChatBackend {
         if let model {
             body["provider"] = model.provider
             body["model"] = model.model
+        }
+        if let effort = OpenAICompatibleBackend.reasoningEffort(thinking) {
+            body["model_options"] = ["reasoning_effort": effort]
         }
         return body
     }

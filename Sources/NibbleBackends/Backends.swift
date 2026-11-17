@@ -23,10 +23,13 @@ public final class Backends: BackendProvider {
         let model = settings[api: kind].model
         return switch kind {
         case .hermes:
-            HermesBackend(address: settings.hermes.address, profile: settings.hermes.profile, apiKey: key(for: settings), model: settings.hermes.model)
-        case .openAI: OpenAICompatibleBackend(address: address, model: model, apiKey: key(for: settings))
-        case .gemini: GeminiBackend(address: address, model: model, apiKey: key(for: settings))
-        case .anthropic: AnthropicBackend(address: address, model: model, apiKey: key(for: settings))
+            HermesBackend(
+                address: settings.hermes.address, profile: settings.hermes.profile, apiKey: key(for: settings),
+                model: settings.hermes.model, thinking: settings.thinking
+            )
+        case .openAI: OpenAICompatibleBackend(address: address, model: model, apiKey: key(for: settings), thinking: settings.thinking)
+        case .gemini: GeminiBackend(address: address, model: model, apiKey: key(for: settings), thinking: settings.thinking)
+        case .anthropic: AnthropicBackend(address: address, model: model, apiKey: key(for: settings), thinking: settings.thinking)
         }
     }
 
@@ -40,6 +43,18 @@ public final class Backends: BackendProvider {
         hermes.kind = .hermes
         let backend = HermesBackend(address: settings.hermes.address, profile: settings.hermes.profile, apiKey: key(for: hermes))
         return try? await backend.modelOptions()
+    }
+
+    public func models(for settings: BackendSettings) async -> [String]? {
+        let kind = settings.kind
+        let address = settings.address(kind)
+        let key = key(for: settings)
+        return switch kind {
+        case .hermes: nil
+        case .openAI: try? await OpenAICompatibleBackend(address: address, model: "", apiKey: key).models()
+        case .gemini: try? await GeminiBackend(address: address, model: "", apiKey: key).models()
+        case .anthropic: try? await AnthropicBackend(address: address, model: "", apiKey: key).models()
+        }
     }
 
     public func check(_ settings: BackendSettings) async -> ConnectionStatus {

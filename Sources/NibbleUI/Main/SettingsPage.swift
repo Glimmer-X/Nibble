@@ -104,9 +104,11 @@ struct SettingsPage: View {
                                 DotSwitch(id: "login", isOn: model.opensAtLogin, label: s.openAtLogin) { model.setOpensAtLogin(!model.opensAtLogin) }
                             }
                             Row(s.versionLabel) { VersionStatus() }
-                            Row(s.updateCheck) {
-                                DotSwitch(id: "update-check", isOn: model.settings.checkForUpdates, label: s.updateCheck) {
-                                    model.settings.checkForUpdates.toggle()
+                            if model.updates.isEnabled {
+                                Row(s.updateCheck) {
+                                    DotSwitch(id: "update-check", isOn: model.settings.checkForUpdates, label: s.updateCheck) {
+                                        model.settings.checkForUpdates.toggle()
+                                    }
                                 }
                             }
                         }
@@ -277,7 +279,8 @@ private struct ConflictNote: View {
     }
 }
 
-/// The version running, a key to check for a newer one now, and what the last check found.
+/// The version running, a key to check for a newer one now and what the last check found (or,
+/// in a build made on this Mac, that it is one).
 private struct VersionStatus: View {
     @Environment(AppModel.self) private var model
 
@@ -286,7 +289,11 @@ private struct VersionStatus: View {
         let colors = model.colors
         let updates = model.updates
         Text(model.version.version).pixelText().foregroundStyle(colors.ink).padding(.horizontal, 8)
-        TextKey(id: "check-updates", title: s.checkForUpdates, place: .main("body")) { updates.check() }
+        if !updates.isEnabled {
+            Text(s.localBuild).pixelText().foregroundStyle(colors.ink2).padding(.leading, 8)
+        } else {
+            TextKey(id: "check-updates", title: s.checkForUpdates, place: .main("body")) { updates.check() }
+        }
         Group {
             if updates.status == .checking {
                 Text(s.checking).foregroundStyle(colors.ink2)
@@ -366,12 +373,28 @@ private struct BackendSection: View {
                     .padding(.vertical, 8)
                 }
                 Row(s.model) { HermesModelStatus() }
+                thinkingRow
             } else {
                 Row(s.model) {
-                    Field(id: "model", text: api(kind, \.model), placeholder: Self.modelPlaceholder(kind)).id(kind)
+                    APIModelPicker(text: api(kind, \.model), placeholder: Self.modelPlaceholder(kind)).id(kind)
                 }
+                thinkingRow
                 Row(s.persona) { PersonaEditor() }
             }
+        }
+    }
+
+    /// How hard thinking models think, for every service.
+    private var thinkingRow: some View {
+        Row(model.strings.thinking) {
+            Flow(spacing: 8, lineSpacing: 8) {
+                ForEach(ThinkingLevel.allCases, id: \.self) { level in
+                    Choice(id: "thinking-\(level)", title: model.strings.thinkingLevel(level), selected: model.settings.backend.thinking == level) {
+                        model.settings.backend.thinking = level
+                    }
+                }
+            }
+            .padding(.vertical, 8)
         }
     }
 
@@ -388,6 +411,50 @@ private struct BackendSection: View {
         case .gemini: "gemini-2.5-flash"
         case .anthropic: "claude-sonnet-5-5"
         case .openAI, .hermes: "deepseek-flash"
+        }
+    }
+}
+
+/// The model of a model's API: picked from the models it offers, the same list as the source
+/// menu's; typed when it offers none, or when the reader wants a name it does not list.
+private struct APIModelPicker: View {
+    @Environment(AppModel.self) private var model
+    @Binding var text: String
+    let placeholder: String
+    @State private var open = false
+    @State private var typing = false
+
+    var body: some View {
+        let s = model.strings
+        let colors = model.colors
+        let listed = !(model.apiModels ?? []).isEmpty
+        if listed && !typing {
+            VStack(alignment: .leading, spacing: 8) {
+                Button { open.toggle() } label: {
+                    HStack(spacing: 8) {
+                        Text(text.isEmpty ? s.notSet : text).font(Typeface.message)
+                            .foregroundStyle(text.isEmpty ? colors.ink2 : colors.ink).lineLimit(1)
+                        DotIconView(icon: .chevron).foregroundStyle(colors.ink2)
+                    }
+                    .padding(.horizontal, 8)
+                    .frame(height: 24)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .boardLight("model", .segment, in: .main("body"), pressed: open)
+                if open {
+                    ModelList(height: 8 * 28, manual: { typing = true; open = false }) { open = false }
+                        .padding(.vertical, 8)
+                        .frame(width: 320, alignment: .leading)
+                        .background { CellSurface(level: 0.1) }
+                }
+            }
+            .padding(.vertical, 8)
+        } else {
+            Field(id: "model", text: $text, placeholder: placeholder)
+            if listed {
+                TextKey(id: "model-list", title: s.chooseFromList, place: .main("body")) { typing = false }
+            }
         }
     }
 }

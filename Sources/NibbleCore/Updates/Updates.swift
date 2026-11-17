@@ -125,6 +125,9 @@ public final class Updates {
     public private(set) var status: Status = .idle
     /// Checks once a day by themselves.
     public var automatic: Bool
+    /// Whether this build looks for releases at all. Builds made on this Mac for its owner (the
+    /// ones `scripts/build.sh` makes) do not: they are newer than any release, or the same.
+    public let isEnabled: Bool
 
     /// Time between automatic checks.
     public static let interval: TimeInterval = 24 * 3600
@@ -143,11 +146,12 @@ public final class Updates {
     @ObservationIgnored private var generation = 0
     @ObservationIgnored private var schedule: Task<Void, Never>?
 
-    public init(current: AppVersion, record: UpdateRecord, automatic: Bool, source: any ReleaseSource) {
+    public init(current: AppVersion, record: UpdateRecord, automatic: Bool, source: any ReleaseSource, enabled: Bool = true) {
         self.current = current
-        self.record = record
+        self.record = enabled ? record : UpdateRecord()
         self.automatic = automatic
         self.source = source
+        isEnabled = enabled
     }
 
     /// The latest release, if it is newer than the version running.
@@ -164,7 +168,7 @@ public final class Updates {
 
     /// Whether an automatic check should run now.
     public var isDue: Bool {
-        guard automatic, status != .checking else { return false }
+        guard isEnabled, automatic, status != .checking else { return false }
         let time = now()
         if let checked = record.checked, time.timeIntervalSince(checked) < Self.interval { return false }
         if let attempted, time.timeIntervalSince(attempted) < Self.retry { return false }
@@ -180,6 +184,7 @@ public final class Updates {
     /// Checks now, at the reader's request: the result shows in `status`, and a dismissed notice
     /// comes back if the release is still newer. A check already under way gives way to it.
     public func check() {
+        guard isEnabled else { return }
         run(asked: true)
     }
 

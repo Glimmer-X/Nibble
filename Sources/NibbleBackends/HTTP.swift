@@ -217,6 +217,28 @@ enum HTTP {
         }
     }
 
+    /// Whether an error says the model does not take what was asked of its thinking ("Thinking
+    /// level MINIMAL is not supported", "reasoning_effort", "effort").
+    static func refusesThinking(_ error: any Error) -> Bool {
+        guard case BackendError.server(400, let message?) = error else { return false }
+        let text = message.lowercased()
+        return text.contains("think") || text.contains("reason") || text.contains("effort")
+    }
+
+    /// Runs `attempt` at `level`, and again at each fallback level while the model refuses the
+    /// thinking asked of it. Refusals arrive before anything streams, so nothing is shown twice.
+    static func withThinking(_ level: ThinkingLevel, _ attempt: (ThinkingLevel) async throws -> Void) async throws {
+        var level = level
+        while true {
+            do {
+                return try await attempt(level)
+            } catch where refusesThinking(error) {
+                guard let next = level.fallback else { throw error }
+                level = next
+            }
+        }
+    }
+
     /// Whether an error says the model takes no system prompt ("Developer instruction is not
     /// enabled", "does not support 'system'").
     static func refusesInstructions(_ error: BackendError) -> Bool {

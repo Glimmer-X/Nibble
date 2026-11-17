@@ -61,6 +61,8 @@ final class AppModel {
     var profiles: [String] = []
     /// What the Hermes profile in use can answer with (loaded while Hermes is in use).
     var hermesModels: HermesModelOptions?
+    /// The models the model's API in use offers (loaded while it is in use).
+    var apiModels: [String]?
     var connection: ConnectionStatus?
     var keyState: KeyState = .missing
     /// The shortcut key is waiting for a new combination.
@@ -177,7 +179,7 @@ final class AppModel {
         return model.isEmpty ? strings.notSet : model
     }
 
-    // MARK: - Hermes models
+    // MARK: - Models
 
     /// The model the Hermes profile in use answers with: the one the reader picked, or the
     /// profile's own default.
@@ -185,13 +187,34 @@ final class AppModel {
         settings.backend.hermes.model ?? hermesModels?.standard
     }
 
-    /// One model the reader can pick for the Hermes profile in use; nil is the profile's default.
+    /// The model the backend in use answers with, for menus: for Hermes the profile's ("Default"
+    /// until Hermes has said), for an API the one set ("Not set" without one).
+    var currentModel: String {
+        let backend = settings.backend
+        guard backend.kind.isAPI else { return hermesModel?.model ?? strings.defaultModel }
+        let model = backend[api: backend.kind].model
+        return model.isEmpty ? strings.notSet : model
+    }
+
+    /// One model the reader can pick for the backend in use.
     struct ModelChoice: Identifiable, Hashable {
-        let model: BackendSettings.HermesModel?
+        enum Pick: Hashable {
+            /// A model for the Hermes profile in use; nil is the profile's default.
+            case hermes(BackendSettings.HermesModel?)
+            /// A model of the API in use, by name.
+            case api(String)
+        }
+
+        let pick: Pick
         let title: String
         var detail: String?
         let selected: Bool
-        var id: String { model.map { "\($0.provider)/\($0.model)" } ?? "" }
+        var id: String {
+            switch pick {
+            case .hermes(let model): model.map { "\($0.provider)/\($0.model)" } ?? ""
+            case .api(let name): name
+            }
+        }
     }
 
     /// A run of model choices under a heading (none for the first).
@@ -201,18 +224,29 @@ final class AppModel {
         var id: String { title ?? "" }
     }
 
+    /// The models for the backend in use. For an API, the ones it offers, with the one set on top
+    /// when it is not among them.
+    var modelGroups: [ModelGroup] {
+        let backend = settings.backend
+        guard backend.kind.isAPI else { return hermesModelGroups }
+        let set = backend[api: backend.kind].model
+        var names = apiModels ?? []
+        if !set.isEmpty, !names.contains(set) { names.insert(set, at: 0) }
+        return [ModelGroup(title: nil, choices: names.map { ModelChoice(pick: .api($0), title: $0, selected: $0 == set) })]
+    }
+
     /// The models for the Hermes profile in use: the profile's default and the ones picked lately,
     /// then every provider's models, the provider in use first. The default model shows only as
     /// "Default".
-    var modelGroups: [ModelGroup] {
+    private var hermesModelGroups: [ModelGroup] {
         let hermes = settings.backend.hermes
         let options = hermesModels
         let standard = options?.standard
         let picked = hermes.model
         func choice(_ model: BackendSettings.HermesModel, detail: String? = nil) -> ModelChoice {
-            ModelChoice(model: model, title: model.model, detail: detail, selected: model == picked)
+            ModelChoice(pick: .hermes(model), title: model.model, detail: detail, selected: model == picked)
         }
-        var first = [ModelChoice(model: nil, title: strings.defaultModel, detail: standard?.model, selected: picked == nil)]
+        var first = [ModelChoice(pick: .hermes(nil), title: strings.defaultModel, detail: standard?.model, selected: picked == nil)]
         let offered = Set(options?.providers.flatMap { p in p.models.map { BackendSettings.HermesModel(provider: p.id, model: $0) } } ?? [])
         // The one in use stays on show even when Hermes no longer offers it.
         let lately = ([picked].compactMap { $0 } + hermes.recent).filter { $0 != standard && (options == nil || offered.contains($0) || $0 == picked) }
@@ -234,10 +268,37 @@ final class AppModel {
         return groups
     }
 
+    func choose(_ pick: ModelChoice.Pick) {
+        switch pick {
+        case .hermes(let model): choose(hermesModel: model)
+        case .api(let name): settings.backend[api: settings.backend.kind].model = name
+        }
+    }
+
     /// Puts a model in use for the Hermes profile in use; nil, or its default model, goes back to
     /// the default.
     func choose(hermesModel model: BackendSettings.HermesModel?) {
         settings.backend.hermes.choose(model == hermesModels?.standard ? nil : model)
+    }
+
+    /// Loads what the backend in use can answer with: the Hermes profiles and models, or the
+    /// API's models.
+    func loadModels() async {
+        if settings.backend.kind == .hermes {
+            await loadProfiles()
+            await loadHermesModels()
+        } else {
+            await loadAPIModels()
+        }
+    }
+
+    func loadAPIModels() async {
+        let backend = settings.backend
+        guard backend.kind.isAPI else { return }
+        let names = await provider.models(for: backend)
+        let now = settings.backend
+        guard now.kind == backend.kind, now.address(now.kind) == backend.address(backend.kind) else { return }
+        apiModels = names
     }
 
     func loadHermesModels() async {
@@ -274,6 +335,9 @@ final class AppModel {
             let hermes = settings.backend.hermes, was = old.backend.hermes
             if hermes.address != was.address { profiles = [] }
             if hermes.address != was.address || hermes.profile != was.profile { hermesModels = nil }
+            if settings.backend.kind != old.backend.kind || settings.backend.address(settings.backend.kind) != old.backend.address(old.backend.kind) {
+                apiModels = nil
+            }
             refreshBackendState()
         }
         applyPersona()
@@ -321,10 +385,7 @@ final class AppModel {
             let status = await provider.check(backend)
             guard !Task.isCancelled, backend == self.settings.backend else { return }
             connection = status
-            if status == .connected, backend.kind == .hermes {
-                await loadProfiles()
-                await loadHermesModels()
-            }
+            if status == .connected { await loadModels() }
         }
     }
 

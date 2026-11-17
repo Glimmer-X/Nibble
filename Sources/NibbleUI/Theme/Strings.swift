@@ -176,6 +176,22 @@ struct Strings {
     /// The Hermes profile's own model, in the model list.
     var defaultModel: String { t("默认", "Default") }
     var useDefaultModel: String { t("改回默认", "Use Default") }
+    /// The model list when the service gave none (no key yet, or it did not answer).
+    var noModels: String { t("没有读到模型", "No models found") }
+    /// Typing a model's name instead of picking it from the list.
+    var typeModel: String { t("手动填写", "Type a Name") }
+    var chooseFromList: String { t("从列表选", "Choose from List") }
+    /// How hard a thinking model thinks.
+    var thinking: String { t("思考", "Thinking") }
+    func thinkingLevel(_ level: ThinkingLevel) -> String {
+        switch level {
+        case .standard: t("默认", "Default")
+        case .off: t("关", "Off")
+        case .low: t("低", "Low")
+        case .medium: t("中", "Medium")
+        case .high: t("高", "High")
+        }
+    }
     var connected: String { t("已连接", "Connected") }
     var checking: String { t("检查中…", "Checking…") }
     var unreachable: String { t("连不上", "Not reachable") }
@@ -313,6 +329,8 @@ struct Strings {
     var ignore: String { t("忽略", "Ignore") }
     var versionLabel: String { t("版本", "Version") }
     var checkForUpdates: String { t("检查更新", "Check for updates") }
+    /// A build made on this Mac, which does not look for releases.
+    var localBuild: String { t("本机构建", "Local build") }
     /// The switch for the daily check.
     var updateCheck: String { t("自动检查更新", "Check daily") }
     var upToDate: String { t("已是最新版本", "Up to date") }

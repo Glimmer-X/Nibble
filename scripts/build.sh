@@ -2,7 +2,9 @@
 # Builds the app and prints its path on the last line.
 #   scripts/build.sh            Debug: "Nibble Dev" (com.glimmer.Nibble.dev)
 #   scripts/build.sh release    Release: "Nibble" (com.glimmer.Nibble)
-# The full xcodebuild log is build/logs/build.log (replaced on every build).
+# The full xcodebuild log is build/logs/build.log (replaced on every build). These builds are for
+# this Mac and never look for releases (NIBBLE_CHECKS_FOR_UPDATES=NO); scripts/release.sh builds
+# the published app, which does.
 set -euo pipefail
 source "${0:A:h}/env.sh"
 
@@ -26,7 +28,7 @@ LOG="$BUILD_DIR/logs/build.log"
 if ! xcodebuild -project Nibble.xcodeproj -scheme Nibble -configuration "$CONFIG" \
         -derivedDataPath "$DERIVED_DATA" \
         -clonedSourcePackagesDirPath "$BUILD_DIR/SourcePackages" \
-        "${SIGNING[@]}" build >"$LOG" 2>&1; then
+        "${SIGNING[@]}" NIBBLE_CHECKS_FOR_UPDATES=NO build >"$LOG" 2>&1; then
     grep -E "error:" "$LOG" | sort -u | head -30 >&2
     echo "BUILD FAILED (full log: $LOG)" >&2
     exit 1

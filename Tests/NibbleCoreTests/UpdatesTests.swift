@@ -231,4 +231,17 @@ import Testing
         #expect(rig.updates.status == .checked)
         #expect(rig.updates.notice != nil)
     }
+
+    @Test func aBuildMadeOnThisMacNeverLooks() async {
+        let source = Source(.success(Self.release("0.2.0")))
+        let seen = UpdateRecord(checked: Date(timeIntervalSince1970: 0), latest: Self.release("0.2.0"))
+        let updates = Updates(current: AppVersion("0.1.1")!, record: seen, automatic: true, source: source, enabled: false)
+        #expect(updates.notice == nil)
+        #expect(!updates.isDue)
+        updates.check()
+        updates.checkIfDue()
+        try? await Task.sleep(for: .milliseconds(50))
+        #expect(source.asked == 0)
+        #expect(updates.status == .idle)
+    }
 }

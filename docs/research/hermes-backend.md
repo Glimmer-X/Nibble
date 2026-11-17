@@ -55,6 +55,10 @@ unless the server enables direct model requests. Nibble sends both when the read
 for the profile, and nothing otherwise; Hermes's config is left as it is. A `/model` typed inside
 the session would win over the request.
 
+How hard the model thinks goes the same way: `model_options.reasoning_effort` (`none`, `low`,
+`medium`, `high`, among others) applies to that turn only; without it the profile's
+`agent.reasoning_effort` holds. Nibble sends it only when the reader picked a level.
+
 ## Approvals
 
 An `approval.request` carries the run, the request id, the command, the `choices` the client may

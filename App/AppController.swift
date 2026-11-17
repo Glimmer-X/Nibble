@@ -54,12 +54,16 @@ final class AppController {
         // as they are).
         let pretend = defaults.string(forKey: "NibbleRelease").flatMap(AppVersion.init)
         let quiet = script != nil && pretend == nil
+        // Builds made on this Mac (scripts/build.sh) never look for releases; a pretended one
+        // still shows, for trying the notice.
+        let checks = Bundle.main.object(forInfoDictionaryKey: "NibbleChecksForUpdates") as? String != "NO" || pretend != nil
         let updateStore = UpdateStore(paths: paths)
         let updates = Updates(
             current: AppVersion(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "") ?? AppVersion("0")!,
             record: quiet ? UpdateRecord() : updateStore.load(),
             automatic: settings.checkForUpdates,
-            source: pretend.map { PretendRelease(version: $0) as any ReleaseSource } ?? GitHubReleases(repository: "Glimmer-X/Nibble")
+            source: pretend.map { PretendRelease(version: $0) as any ReleaseSource } ?? GitHubReleases(repository: "Glimmer-X/Nibble"),
+            enabled: checks
         )
         updates.onRecordChange = { record in
             do {
@@ -196,6 +200,7 @@ private final class ScriptedProvider: BackendProvider {
     func backend(for settings: BackendSettings) -> any ChatBackend { ScriptedBackend.named(script) }
     func profiles(for settings: BackendSettings) async -> [String] { await base.profiles(for: settings) }
     func hermesModels(for settings: BackendSettings) async -> HermesModelOptions? { await base.hermesModels(for: settings) }
+    func models(for settings: BackendSettings) async -> [String]? { await base.models(for: settings) }
     func check(_ settings: BackendSettings) async -> ConnectionStatus { .connected }
     func keyState(for settings: BackendSettings) -> KeyState { base.keyState(for: settings) }
     func saveKey(_ key: String?, for settings: BackendSettings) throws { try base.saveKey(key, for: settings) }

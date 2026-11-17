@@ -7,31 +7,46 @@ import NibbleCore
 /// Stateless: every request carries the whole conversation, after a system message with the
 /// persona's instructions. Reasoning arrives as `delta.reasoning_content` (DeepSeek and most
 /// others) or `delta.reasoning` (Ollama, OpenRouter); token counts come with the last chunk when
-/// the server honours `stream_options.include_usage`.
+/// the server honours `stream_options.include_usage`. The thinking level goes as
+/// `reasoning_effort` (off is `none`); a server that refuses it gets the request without.
 public struct OpenAICompatibleBackend: ChatBackend {
     /// The API's base address, before `/chat/completions`.
     public let address: String
     public let model: String
     public let apiKey: String?
+    public let thinking: ThinkingLevel
 
-    public init(address: String, model: String, apiKey: String?) {
+    public init(address: String, model: String, apiKey: String?, thinking: ThinkingLevel = .standard) {
         self.address = address
         self.model = model
         self.apiKey = apiKey
+        self.thinking = thinking
     }
 
     public func respond(to request: ChatRequest) -> AsyncThrowingStream<ChatEvent, any Error> {
-        HTTP.reply(to: request) { request, continuation in try await stream(request, into: continuation) }
+        HTTP.reply(to: request) { request, continuation in
+            try await HTTP.withThinking(thinking) { level in try await stream(request, level: level, into: continuation) }
+        }
     }
 
-    private func stream(_ chat: ChatRequest, into continuation: AsyncThrowingStream<ChatEvent, any Error>.Continuation) async throws {
+    /// `reasoning_effort` for a level; nil for the model's default.
+    static func reasoningEffort(_ level: ThinkingLevel) -> String? {
+        switch level {
+        case .standard: nil
+        case .off: "none"
+        case .low, .medium, .high: level.rawValue
+        }
+    }
+
+    private func stream(_ chat: ChatRequest, level: ThinkingLevel, into continuation: AsyncThrowingStream<ChatEvent, any Error>.Continuation) async throws {
         guard !model.isEmpty, let url = endpoint("/chat/completions") else { throw BackendError.notConfigured }
-        let body: [String: Any] = [
+        var body: [String: Any] = [
             "model": model,
             "messages": Self.messages(chat),
             "stream": true,
             "stream_options": ["include_usage": true],
         ]
+        if let effort = Self.reasoningEffort(level) { body["reasoning_effort"] = effort }
         let request = try HTTP.request(url, method: "POST", key: apiKey, json: body, accept: "text/event-stream")
         let bytes = try await HTTP.stream(request)
         continuation.yield(.model(model))

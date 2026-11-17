@@ -6,34 +6,51 @@ import NibbleCore
 /// Stateless: every request carries the whole conversation as `contents` (the reader is "user",
 /// answers are "model"), the persona's instructions as `systemInstruction`, images inline. The key
 /// goes in `x-goog-api-key`. Thinking is shown when the model shares it (`includeThoughts`); a model
-/// that cannot think gets the request again without asking. Token counts come with every chunk.
+/// that cannot think gets the request again without asking. The thinking level goes as
+/// `thinkingLevel` (off is `minimal`, the least a model allows). Token counts come with every chunk.
 public struct GeminiBackend: ChatBackend {
     /// The API's base address, `https://generativelanguage.googleapis.com` unless a proxy is used.
     public let address: String
     public let model: String
     public let apiKey: String?
+    public let thinking: ThinkingLevel
 
-    public init(address: String, model: String, apiKey: String?) {
+    public init(address: String, model: String, apiKey: String?, thinking: ThinkingLevel = .standard) {
         self.address = address
         self.model = model
         self.apiKey = apiKey
+        self.thinking = thinking
     }
 
     public func respond(to request: ChatRequest) -> AsyncThrowingStream<ChatEvent, any Error> {
         HTTP.reply(to: request) { request, continuation in
             do {
-                try await stream(request, thoughts: true, into: continuation)
-            } catch let BackendError.server(400, message?) where message.lowercased().contains("think") {
-                try await stream(request, thoughts: false, into: continuation)
+                try await HTTP.withThinking(thinking) { level in
+                    try await stream(request, thoughts: true, level: level, into: continuation)
+                }
+            } catch where HTTP.refusesThinking(error) {
+                try await stream(request, thoughts: false, level: .standard, into: continuation)
             }
         }
+    }
+
+    /// The `thinkingConfig` for a request: thoughts shown, and the level when one is set.
+    static func thinkingConfig(thoughts: Bool, level: ThinkingLevel) -> [String: Any]? {
+        var config: [String: Any] = [:]
+        if thoughts { config["includeThoughts"] = true }
+        switch level {
+        case .standard: break
+        case .off: config["thinkingLevel"] = "minimal"
+        case .low, .medium, .high: config["thinkingLevel"] = level.rawValue
+        }
+        return config.isEmpty ? nil : config
     }
 
     private var modelID: String {
         model.hasPrefix("models/") ? String(model.dropFirst("models/".count)) : model
     }
 
-    private func stream(_ chat: ChatRequest, thoughts: Bool, into continuation: AsyncThrowingStream<ChatEvent, any Error>.Continuation) async throws {
+    private func stream(_ chat: ChatRequest, thoughts: Bool, level: ThinkingLevel, into continuation: AsyncThrowingStream<ChatEvent, any Error>.Continuation) async throws {
         guard !modelID.isEmpty, let url = HTTP.url(address, "/v1beta/models/\(modelID):streamGenerateContent?alt=sse") else {
             throw BackendError.notConfigured
         }
@@ -41,8 +58,8 @@ public struct GeminiBackend: ChatBackend {
         if let instructions = chat.instructions {
             body["systemInstruction"] = ["parts": [["text": instructions]]]
         }
-        if thoughts {
-            body["generationConfig"] = ["thinkingConfig": ["includeThoughts": true]]
+        if let config = Self.thinkingConfig(thoughts: thoughts, level: level) {
+            body["generationConfig"] = ["thinkingConfig": config]
         }
         let request = try HTTP.request(url, method: "POST", key: apiKey, keyHeader: "x-goog-api-key", json: body, accept: "text/event-stream")
         let bytes = try await HTTP.stream(request)

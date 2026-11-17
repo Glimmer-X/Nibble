@@ -272,4 +272,47 @@ import Testing
         let back = try JSONDecoder().decode(BackendSettings.Hermes.self, from: JSONEncoder().encode(hermes))
         #expect(back == hermes)
     }
+
+    // MARK: Thinking levels
+
+    @Test func thinkingLevelsGoInEachAPIsOwnTerms() throws {
+        #expect(GeminiBackend.thinkingConfig(thoughts: true, level: .standard) as? [String: Bool] == ["includeThoughts": true])
+        #expect(GeminiBackend.thinkingConfig(thoughts: true, level: .off)?["thinkingLevel"] as? String == "minimal")
+        #expect(GeminiBackend.thinkingConfig(thoughts: false, level: .high)?["thinkingLevel"] as? String == "high")
+        #expect(GeminiBackend.thinkingConfig(thoughts: false, level: .standard) == nil)
+
+        #expect(OpenAICompatibleBackend.reasoningEffort(.standard) == nil)
+        #expect(OpenAICompatibleBackend.reasoningEffort(.off) == "none")
+        #expect(OpenAICompatibleBackend.reasoningEffort(.medium) == "medium")
+
+        #expect(AnthropicBackend.thinkingFields(.standard).isEmpty)
+        let low = AnthropicBackend.thinkingFields(.low)
+        #expect((low["thinking"] as? [String: String]) == ["type": "adaptive", "display": "summarized"])
+        #expect((low["output_config"] as? [String: String]) == ["effort": "low"])
+        #expect((AnthropicBackend.thinkingFields(.off)["thinking"] as? [String: String]) == ["type": "disabled"])
+
+        let turn = ChatRequest.Turn(role: .user, text: "hi")
+        #expect(HermesBackend.body(turn, model: nil)["model_options"] == nil)
+        let options = try #require(HermesBackend.body(turn, model: nil, thinking: .off)["model_options"] as? [String: String])
+        #expect(options == ["reasoning_effort": "none"])
+    }
+
+    @Test func aRefusedThinkingLevelFallsBack() async throws {
+        var tried: [ThinkingLevel] = []
+        try await HTTP.withThinking(.off) { level in
+            tried.append(level)
+            if level != .standard { throw BackendError.server(status: 400, message: "Thinking level MINIMAL is not supported") }
+        }
+        #expect(tried == [.off, .low, .standard])
+
+        // Other errors are not retried.
+        tried = []
+        await #expect(throws: BackendError.self) {
+            try await HTTP.withThinking(.high) { level in
+                tried.append(level)
+                throw BackendError.server(status: 400, message: "bad request")
+            }
+        }
+        #expect(tried == [.high])
+    }
 }
