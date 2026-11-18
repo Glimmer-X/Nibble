@@ -37,6 +37,20 @@ import Testing
         #expect(await repository.load(id: session.conversation.id) == session.conversation)
     }
 
+    @Test func theSourcesOfASearchedAnswerAreKeptOnceEach() async throws {
+        let a = Source(name: "bbc.co.uk", url: URL(string: "https://www.bbc.co.uk/weather")!)
+        let b = Source(name: "metoffice.gov.uk", url: URL(string: "https://www.metoffice.gov.uk")!)
+        let again = Source(name: "bbc.co.uk", url: URL(string: "https://redirect.example/2")!)
+        let session = makeSession(StubBackend(events: [.text("Rain."), .sources([a]), .sources([again, b])]))
+        session.draft = "weather?"
+        session.send()
+        await session.waitUntilIdle()
+
+        #expect(session.conversation.messages[1].sources == [a, b])
+        #expect(session.conversation.messages[0].sources == nil)
+        #expect(await repository.load(id: session.conversation.id) == session.conversation)
+    }
+
     @Test func sendsEarlierTurnsAndImagesToTheBackend() async throws {
         let backend = StubBackend(events: [.text("ok")])
         let session = makeSession(backend)

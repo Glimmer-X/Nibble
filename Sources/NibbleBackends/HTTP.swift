@@ -239,6 +239,26 @@ enum HTTP {
         }
     }
 
+    /// Whether an error says the model or the key cannot search the web as asked ("Search
+    /// Grounding is not supported", an unknown tool type).
+    static func refusesSearch(_ error: any Error) -> Bool {
+        guard case BackendError.server(400, let message?) = error else { return false }
+        let text = message.lowercased()
+        return text.contains("search") || text.contains("grounding") || text.contains("tool")
+    }
+
+    /// Runs `attempt` with each way of searching in turn while the request is refused for it; the
+    /// last is tried whatever happens. Refusals arrive before anything streams.
+    static func withSearch<Option>(_ options: [Option], _ attempt: (Option) async throws -> Void) async throws {
+        for (index, option) in options.enumerated() {
+            do {
+                return try await attempt(option)
+            } catch where index < options.count - 1 && refusesSearch(error) {
+                continue
+            }
+        }
+    }
+
     /// Whether an error says the model takes no system prompt ("Developer instruction is not
     /// enabled", "does not support 'system'").
     static func refusesInstructions(_ error: BackendError) -> Bool {

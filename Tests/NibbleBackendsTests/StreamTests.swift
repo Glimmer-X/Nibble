@@ -200,15 +200,78 @@ import Testing
     }
 
     @Test func claudeEventsGatherUsageAcrossTheStream() {
-        var usage = Usage()
+        var usage = AnthropicBackend.StreamState()
         let start: [String: Any] = ["type": "message_start", "message": ["usage": ["input_tokens": 7, "cache_read_input_tokens": 3, "output_tokens": 1]]]
-        #expect(AnthropicBackend.events(in: start, usage: &usage) == [.usage(Usage(inputTokens: 10, outputTokens: 1))])
+        #expect(AnthropicBackend.events(in: start, state: &usage) == [.usage(Usage(inputTokens: 10, outputTokens: 1))])
         let text: [String: Any] = ["type": "content_block_delta", "delta": ["type": "text_delta", "text": "Hi"]]
-        #expect(AnthropicBackend.events(in: text, usage: &usage) == [.text("Hi")])
+        #expect(AnthropicBackend.events(in: text, state: &usage) == [.text("Hi")])
         let thinking: [String: Any] = ["type": "content_block_delta", "delta": ["type": "thinking_delta", "thinking": "hm"]]
-        #expect(AnthropicBackend.events(in: thinking, usage: &usage) == [.reasoning("hm")])
+        #expect(AnthropicBackend.events(in: thinking, state: &usage) == [.reasoning("hm")])
         let end: [String: Any] = ["type": "message_delta", "usage": ["output_tokens": 12]]
-        #expect(AnthropicBackend.events(in: end, usage: &usage) == [.usage(Usage(inputTokens: 10, outputTokens: 12))])
+        #expect(AnthropicBackend.events(in: end, state: &usage) == [.usage(Usage(inputTokens: 10, outputTokens: 12))])
+    }
+
+    @Test func geminiSearchedAnswersNameTheSitesTheyDrewOn() throws {
+        let link = "https://vertexaisearch.cloud.google.com/grounding-api-redirect/abc"
+        let chunk: [String: Any] = [
+            "candidates": [[
+                "content": ["parts": [["text": ""]]],
+                "groundingMetadata": [
+                    "groundingChunks": [["web": ["uri": link, "title": "metoffice.gov.uk"]], ["web": ["title": "no link"]]],
+                    "webSearchQueries": ["London weather today"],
+                ],
+            ]],
+        ]
+        #expect(try GeminiBackend.events(in: chunk) == [.sources([Source(name: "metoffice.gov.uk", url: URL(string: link)!)])])
+        #expect((GeminiBackend.searchTools.first?["google_search"]) != nil)
+    }
+
+    @Test func claudeSearchesShowAsActivityAndCitationsBecomeSources() {
+        var state = AnthropicBackend.StreamState()
+        func events(_ event: [String: Any]) -> [ChatEvent] { AnthropicBackend.events(in: event, state: &state) }
+        #expect(events(["type": "content_block_start", "index": 0, "content_block": ["type": "text", "text": ""]]) == [])
+        #expect(events(["type": "content_block_delta", "index": 0, "delta": ["type": "text_delta", "text": "Let me look."]]) == [.text("Let me look.")])
+        #expect(events(["type": "content_block_start", "index": 1, "content_block": ["type": "server_tool_use", "name": "web_search"]])
+            == [.activity(Activity(.searching))])
+        #expect(events(["type": "content_block_delta", "index": 1, "delta": ["type": "input_json_delta", "partial_json": "{\"query\": \"London"]]) == [])
+        #expect(events(["type": "content_block_delta", "index": 1, "delta": ["type": "input_json_delta", "partial_json": " weather\"}"]]) == [])
+        #expect(events(["type": "content_block_stop", "index": 1]) == [.activity(Activity(.searching, detail: "London weather"))])
+        #expect(events(["type": "content_block_start", "index": 2, "content_block": ["type": "web_search_tool_result", "content": []]]) == [.activityEnded])
+        // The answer after the search starts a new paragraph; a cited passage right after it does not.
+        #expect(events(["type": "content_block_start", "index": 3, "content_block": ["type": "text", "text": ""]]) == [.text("\n\n")])
+        let citation: [String: Any] = ["type": "web_search_result_location", "url": "https://www.bbc.co.uk/weather", "title": "BBC Weather"]
+        #expect(events(["type": "content_block_delta", "index": 3, "delta": ["type": "citations_delta", "citation": citation]])
+            == [.sources([Source(name: "bbc.co.uk", url: URL(string: "https://www.bbc.co.uk/weather")!)])])
+        #expect(events(["type": "content_block_start", "index": 4, "content_block": ["type": "text", "text": ""]]) == [])
+        #expect(events(["type": "content_block_start", "index": 5, "content_block": ["type": "server_tool_use", "name": "code_execution"]])
+            == [.activity(Activity(.tool))])
+    }
+
+    @Test func claudeOffersSearchNewestVersionFirst() {
+        #expect(AnthropicBackend.searchTools == ["web_search_20260209", "web_search_20250305"])
+        let tool = AnthropicBackend.tools(searching: "web_search_20260209")[0]
+        #expect(tool["name"] as? String == "web_search")
+        #expect(tool["max_uses"] as? Int == AnthropicBackend.maxSearches)
+    }
+
+    @Test func aRefusedSearchFallsBackUntilTheLastWay() async throws {
+        var tried: [String?] = []
+        try await HTTP.withSearch(["new", "old", nil]) { tool in
+            tried.append(tool)
+            if tool != nil { throw BackendError.server(status: 400, message: "Unknown tool type: \(tool!)") }
+        }
+        #expect(tried == ["new", "old", nil])
+        // Other failures are not about searching and end the reply.
+        tried = []
+        await #expect(throws: BackendError.self) {
+            try await HTTP.withSearch(["new", nil]) { tool in
+                tried.append(tool)
+                throw BackendError.server(status: 400, message: "max_tokens too large")
+            }
+        }
+        #expect(tried == ["new"])
+        #expect(HTTP.refusesSearch(BackendError.server(status: 400, message: "Search Grounding is not supported.")))
+        #expect(!HTTP.refusesSearch(BackendError.server(status: 500, message: "search backend down")))
     }
 
     @Test func claudeMessagesPutImagesBeforeText() throws {

@@ -379,6 +379,13 @@ private struct BackendSection: View {
                     APIModelPicker(text: api(kind, \.model), placeholder: Self.modelPlaceholder(kind)).id(kind)
                 }
                 thinkingRow
+                if kind.searchesWeb {
+                    Row(s.webSearch) {
+                        DotSwitch(id: "web-search", isOn: model.settings.backend.search, label: s.webSearch) {
+                            model.settings.backend.search.toggle()
+                        }
+                    }
+                }
                 Row(s.persona) { PersonaEditor() }
             }
         }

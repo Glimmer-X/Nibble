@@ -79,12 +79,31 @@ public enum ChatEvent: Sendable, Equatable {
     /// The whole answer as the backend finally has it, replacing what streamed (a backend that
     /// streamed commentary on its way, say).
     case replaceAnswer(String)
+    /// Pages the answer drew on (a web search's results); added to those already given, each site once.
+    case sources([Source])
     /// Token counts for this reply so far.
     case usage(Usage)
     /// The model that answered.
     case model(String)
     /// The backend's handle for continuing this conversation on its side.
     case remoteSession(String)
+}
+
+/// A page an answer drew on: a short name for it (a site, a title) and where it is.
+public struct Source: Codable, Sendable, Equatable, Hashable {
+    public let name: String
+    public let url: URL
+
+    public init(name: String, url: URL) {
+        self.name = name
+        self.url = url
+    }
+
+    /// The site of an address, as people say it (`bbc.co.uk`, not `www.bbc.co.uk`).
+    public static func site(of url: URL) -> String? {
+        guard let host = url.host(), !host.isEmpty else { return nil }
+        return host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
+    }
 }
 
 /// What a backend is doing while it works on an answer.

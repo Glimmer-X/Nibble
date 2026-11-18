@@ -192,6 +192,10 @@ struct Strings {
         case .high: t("高", "High")
         }
     }
+    /// Letting the service search the web while it answers.
+    var webSearch: String { t("联网搜索", "Web Search") }
+    /// The pages a searched answer drew on.
+    var sources: String { t("来源", "Sources") }
     var connected: String { t("已连接", "Connected") }
     var checking: String { t("检查中…", "Checking…") }
     var unreachable: String { t("连不上", "Not reachable") }

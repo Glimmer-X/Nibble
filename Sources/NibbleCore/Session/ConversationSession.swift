@@ -378,6 +378,13 @@ public final class ConversationSession {
             setPhase(.attention(approval))
         case .replaceAnswer(let text):
             updateMessage(replyID) { $0.text = text }
+        case .sources(let found):
+            updateMessage(replyID) { message in
+                var all = message.sources ?? []
+                // Each site once: Gemini links every page through its own redirect address.
+                for source in found where !all.contains(where: { $0.name == source.name }) { all.append(source) }
+                message.sources = all.isEmpty ? nil : all
+            }
         case .usage(let usage):
             reply.usage = usage
         case .model(let name):

@@ -28,6 +28,8 @@ public struct Message: Identifiable, Codable, Sendable, Equatable {
     /// How the reply went: how long the model worked before it answered, how fast it wrote.
     /// Assistant messages only; nil for older files.
     public var stats: ReplyStats?
+    /// The pages the answer drew on, when the backend searched the web; nil when it did not.
+    public var sources: [Source]?
 
     public init(
         id: UUID = UUID(),
@@ -37,7 +39,8 @@ public struct Message: Identifiable, Codable, Sendable, Equatable {
         attachments: [Attachment] = [],
         createdAt: Date = Date(),
         status: Status = .complete,
-        stats: ReplyStats? = nil
+        stats: ReplyStats? = nil,
+        sources: [Source]? = nil
     ) {
         self.id = id
         self.role = role
@@ -47,6 +50,7 @@ public struct Message: Identifiable, Codable, Sendable, Equatable {
         self.createdAt = createdAt
         self.status = status
         self.stats = stats
+        self.sources = sources
     }
 
     public var isFailed: Bool {

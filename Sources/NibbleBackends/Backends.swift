@@ -28,8 +28,8 @@ public final class Backends: BackendProvider {
                 model: settings.hermes.model, thinking: settings.thinking
             )
         case .openAI: OpenAICompatibleBackend(address: address, model: model, apiKey: key(for: settings), thinking: settings.thinking)
-        case .gemini: GeminiBackend(address: address, model: model, apiKey: key(for: settings), thinking: settings.thinking)
-        case .anthropic: AnthropicBackend(address: address, model: model, apiKey: key(for: settings), thinking: settings.thinking)
+        case .gemini: GeminiBackend(address: address, model: model, apiKey: key(for: settings), thinking: settings.thinking, search: settings.search)
+        case .anthropic: AnthropicBackend(address: address, model: model, apiKey: key(for: settings), thinking: settings.thinking, search: settings.search)
         }
     }
 

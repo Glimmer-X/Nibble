@@ -202,6 +202,9 @@ private struct ReplyView: View {
             } else if !message.text.isEmpty {
                 MarkdownBody(text: message.text)
             }
+            if let sources = message.sources, !sources.isEmpty {
+                SourcesLine(id: message.id, sources: sources)
+            }
             foot
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -228,6 +231,28 @@ private struct ReplyView: View {
                 TextKey(id: "copy-\(message.id)", title: model.copied == message.id ? s.copied : s.copy) { model.copy(message) }
             } else if message.status == .cancelled, !message.text.isEmpty {
                 Text(s.stopped).pixelText().foregroundStyle(model.colors.ink2)
+            }
+        }
+        .padding(.leading, -8)
+    }
+}
+
+/// The pages a searched answer drew on, each a key that opens it in the browser.
+private struct SourcesLine: View {
+    @Environment(PanelModel.self) private var model
+    let id: Message.ID
+    let sources: [Source]
+
+    /// The most shown; answers rarely lean on more.
+    private static let limit = 5
+
+    var body: some View {
+        Flow(spacing: 0, lineSpacing: 0) {
+            Text(model.strings.sources).pixelText().foregroundStyle(model.colors.ink3)
+                .padding(.horizontal, 8).frame(height: Typeface.keyHeight)
+            ForEach(Array(sources.prefix(Self.limit).enumerated()), id: \.offset) { index, source in
+                TextKey(id: "source-\(id)-\(index)", title: source.name) { NSWorkspace.shared.open(source.url) }
+                    .help(source.url.absoluteString)
             }
         }
         .padding(.leading, -8)

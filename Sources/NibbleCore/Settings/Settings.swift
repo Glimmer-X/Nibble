@@ -163,6 +163,9 @@ public struct BackendSettings: Codable, Sendable, Equatable {
         /// A model's API, answering as the reader's personas (Hermes has profiles of its own).
         public var isAPI: Bool { self != .hermes }
 
+        /// Whether the service can search the web itself while it answers (Gemini, Claude).
+        public var searchesWeb: Bool { self == .gemini || self == .anthropic }
+
         /// Where the API is when its address is left empty (none for the OpenAI-compatible kind).
         public var officialAddress: String? {
             switch self {
@@ -177,17 +180,20 @@ public struct BackendSettings: Codable, Sendable, Equatable {
     public var kind: Kind
     /// How hard thinking models think, for every backend.
     public var thinking: ThinkingLevel
+    /// Whether services that can search the web (`Kind.searchesWeb`) may, when the model sees fit.
+    public var search: Bool
     public var hermes: Hermes
     public var openAI: API
     public var gemini: API
     public var anthropic: API
 
     public init(
-        kind: Kind = .hermes, thinking: ThinkingLevel = .standard, hermes: Hermes = Hermes(),
+        kind: Kind = .hermes, thinking: ThinkingLevel = .standard, search: Bool = true, hermes: Hermes = Hermes(),
         openAI: API = API(), gemini: API = API(), anthropic: API = API()
     ) {
         self.kind = kind
         self.thinking = thinking
+        self.search = search
         self.hermes = hermes
         self.openAI = openAI
         self.gemini = gemini
@@ -304,6 +310,7 @@ public struct BackendSettings: Codable, Sendable, Equatable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         kind = (try? c.decodeIfPresent(Kind.self, forKey: .kind)) ?? defaults.kind
         thinking = (try? c.decodeIfPresent(ThinkingLevel.self, forKey: .thinking)) ?? defaults.thinking
+        search = (try? c.decodeIfPresent(Bool.self, forKey: .search)) ?? defaults.search
         hermes = try c.decodeIfPresent(Hermes.self, forKey: .hermes) ?? defaults.hermes
         openAI = try c.decodeIfPresent(API.self, forKey: .openAI) ?? defaults.openAI
         gemini = try c.decodeIfPresent(API.self, forKey: .gemini) ?? defaults.gemini
